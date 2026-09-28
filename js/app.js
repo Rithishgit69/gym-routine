@@ -75,7 +75,8 @@
     right: '<svg viewBox="0 0 24 24"><path d="M9 5l7 7-7 7"/></svg>',
     check: '<svg viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>',
     download: '<svg viewBox="0 0 24 24"><path d="M12 4v11M7 10l5 5 5-5M5 20h14"/></svg>',
-    swap: '<svg viewBox="0 0 24 24"><path d="M7 7h11l-3-3M17 17H6l3 3"/></svg>'
+    swap: '<svg viewBox="0 0 24 24"><path d="M7 7h11l-3-3M17 17H6l3 3"/></svg>',
+    film: '<svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M10 9.5v5l4.5-2.5z"/></svg>'
   };
 
   let toastTimer;
@@ -99,7 +100,13 @@
     calMonth: null, // Date (1st of month)
     todayLogs: new Map(), // slot -> log record
     installPrompt: null,
-    lastCheckinAnim: null
+    lastCheckinAnim: null,
+    editJob: null,
+    editTried: new Set(),
+    sheetStudio: null,
+    studioTpl: null,
+    studioSong: null,
+    autoEditMonth: null
   };
 
   function thumbUrl(date) {
@@ -237,27 +244,12 @@
     setHeader(fmtDay(now), week > 0 ? `Week ${week} · ${phase.label}` : `Program starts ${fmtDate(parseKey(state.settings.programStart))}`);
 
     const ci = state.checkins.get(todayKey());
-    const nextS = P.sessions[rt.current];
+    const isRoutine = sKey === rt.current;
     const lastLine = rt.trainingToday
-      ? `You're training <b>${nextS.name}</b> today.`
+      ? `Training ${P.sessions[rt.current].name} today`
       : rt.last
-        ? `Last workout: ${P.sessions[rt.last.session].name}, ${ago(daysBetween(rt.last.date, todayKey()))}.`
-        : 'First workout: start the rotation with Push.';
-    const gap = !ci && rt.daysSinceCheckin !== null && rt.daysSinceCheckin >= 2
-      ? `<div class="small" style="color:var(--warn);margin-top:4px">No check-in for ${rt.daysSinceCheckin} days. Your routine is waiting.</div>` : '';
-    const checkinHtml = ci
-      ? `<div class="card checkin-card">
-          ${thumbUrl(todayKey()) ? `<button class="photo-btn" data-action="photo" data-date="${todayKey()}" aria-label="View today's photo"><img src="${thumbUrl(todayKey())}" alt=""></button>` : ''}
-          <div class="grow"><div class="card-title">Checked in at ${fmtTime(ci.ts)}</div>
-          <div class="muted small">Routine today: <b>${nextS.name}</b> · ${esc(nextS.focus)}</div></div>
-          <button class="btn small ghost" data-action="goto" data-tab="calendar">Calendar</button></div>`
-      : `<div class="card reminder">
-          <div class="muted small" style="text-transform:uppercase;letter-spacing:.06em;font-weight:700">Your routine today</div>
-          <div class="reminder-title">${nextS.name} <span class="muted">· ${esc(nextS.focus)}</span></div>
-          <div class="muted small">${lastLine} ${nextS.items.length} exercises, ${nextS.duration}.</div>${gap}
-          <button class="btn primary block" style="margin-top:12px" data-action="checkin">${ICON.camera}Check in with a gym photo</button></div>`;
-
-    const seg = P.order.map((k) => `<button class="${k === sKey ? 'active' : ''}" data-action="session" data-s="${k}">${P.sessions[k].name}${k === rt.current ? '<span class="dot"></span>' : ''}</button>`).join('');
+        ? `Last: ${P.sessions[rt.last.session].name}, ${ago(daysBetween(rt.last.date, todayKey()))}`
+        : 'Start of the rotation';
 
     let totalSets = 0; let setsDone = 0; let doneEx = 0;
     const rows = [];
@@ -269,31 +261,291 @@
       totalSets += planned; setsDone += Math.min(logged, planned);
       const complete = logged >= planned;
       if (complete) doneEx++;
+      const num = item.n.length === 1 ? `0${item.n}` : item.n.toUpperCase();
       rows.push(`<button class="ex ${complete ? 'done' : ''} ${item.main ? 'main' : ''}" data-action="open-ex" data-slot="${item.n}" data-ex="${exId}">
-        <span class="num">${item.n}</span>
+        <span class="ex-num">${num}</span>
         <img class="thumb" src="${mediaUrl(exId, 'img')}" alt="" loading="lazy" crossorigin="anonymous">
         <span>
           ${item.main ? '<span class="tag">Main lift</span>' : ''}
           <div class="name">${esc(exName(exId))}${exId !== item.id ? ' <span class="muted small">(swap)</span>' : ''}</div>
           <div class="meta">${planned} × ${repText(item)} · ${item.rest ? `rest ${fmtRest(item.rest)}` : `then ${item.superset}, no rest`} · RIR ${rirFor(item, phase)}</div>
         </span>
-        <span class="state">${complete ? ICON.check : `${logged}/${planned}`}</span>
-      </button>${item.superset && item.n.endsWith('a') ? `<div class="superset-link">↓ Superset: do ${item.n} then ${item.superset}, then rest</div>` : ''}`);
+        <span class="state">${complete ? `<span class="done-badge">${ICON.check}</span>` : miniRing(logged, planned)}</span>
+      </button>${item.superset && item.n.endsWith('a') ? `<div class="superset-link">↓ Superset: ${item.n} then ${item.superset}, then rest</div>` : ''}`);
     }
+    const pct = totalSets ? Math.round((setsDone / totalSets) * 100) : 0;
+
+    const gap = !ci && rt.daysSinceCheckin !== null && rt.daysSinceCheckin >= 2
+      ? `<div class="warn-line">No check-in for ${rt.daysSinceCheckin} days. Your routine is waiting.</div>` : '';
+    const checkin = ci
+      ? `<div class="checked-row">
+          ${thumbUrl(todayKey()) ? `<button class="photo-btn" data-action="photo" data-date="${todayKey()}" aria-label="View today's photo"><img src="${thumbUrl(todayKey())}" alt=""></button>` : ''}
+          <div class="grow"><b>Checked in</b><div class="muted small">${fmtTime(ci.ts)} · attendance marked</div></div>
+          <button class="btn small ghost" data-action="goto" data-tab="calendar">Calendar</button></div>`
+      : `<button class="btn primary block" data-action="checkin">${ICON.camera}Check in with a gym photo</button>`;
+
+    const hero = `<section class="hero">
+        <div class="hero-top"><span class="eyebrow">${isRoutine ? 'Today’s routine' : 'Preview'}</span>
+          <span class="pill ok">${week > 0 ? `Week ${week} · ${phase.label}` : 'Week 1 soon'}</span></div>
+        <div class="hero-main">
+          <div><h1 class="hero-title">${S.name}</h1>
+            <div class="hero-sub">${esc(S.focus)}</div>
+            <div class="hero-meta"><span>${S.items.length} exercises</span><span>${S.duration}</span>${isRoutine ? `<span>${lastLine}</span>` : `<span>Up next: ${P.sessions[rt.current].name}</span>`}</div>
+          </div>
+          ${bigRing(pct, `${setsDone}/${totalSets} sets`)}
+        </div>
+        ${gap}
+        ${checkin}
+      </section>`;
+
+    const seg = P.order.map((k) => `<button class="${k === sKey ? 'active' : ''}" data-action="session" data-s="${k}">${P.sessions[k].name}${k === rt.current && k !== sKey ? '<span class="dot"></span>' : ''}</button>`).join('');
 
     const main = S.items.find((i) => i.main);
     const warm = await warmupHtml(sKey, main, phase);
+    const editCard = await editCardHtml();
 
     v.innerHTML = `
-      ${checkinHtml}
-      <div class="card phase ${phase.key}"><div class="row between"><div class="card-title">${week > 0 ? `Week ${week}: ${phase.label}` : 'Before week 1'}</div><span class="pill">${S.duration}</span></div>
-        <div class="muted small">${phase.note}</div></div>
+      ${editCard}
+      ${hero}
       <div class="seg">${seg}</div>
-      <div class="row between" style="margin:0 2px 6px"><div><b>${S.name}</b> <span class="muted small">· ${esc(S.focus)}</span></div><span class="muted small">${doneEx}/${S.items.length} done</span></div>
-      <div class="progress" style="margin-bottom:12px"><span style="width:${totalSets ? (setsDone / totalSets) * 100 : 0}%"></span></div>
+      <div class="card phase ${phase.key}"><div><div class="card-title">${week > 0 ? `Week ${week} · ${phase.label}` : 'Before week 1'}</div>
+        <div class="muted small">${phase.note}</div></div></div>
       ${warm}
+      <div class="list-head"><b>Exercises</b><span class="muted small">${doneEx}/${S.items.length} done</span></div>
       <div class="ex-list">${rows.join('')}</div>
-      <p class="muted small" style="margin-top:14px">Tap an exercise for photos and animation, how to do it, common mistakes and the set logger.</p>`;
+      <p class="muted small" style="margin-top:14px">Tap an exercise for photos, animation, how-to, common mistakes and the set logger.</p>`;
+    afterTodayRender();
+  }
+
+  function bigRing(pct, label) {
+    const r = 40; const c = 2 * Math.PI * r;
+    return `<div class="ring" aria-label="${pct}% done"><svg viewBox="0 0 96 96"><circle class="track" cx="48" cy="48" r="${r}"/>
+      <circle class="fill" cx="48" cy="48" r="${r}" stroke-dasharray="${c.toFixed(1)}" stroke-dashoffset="${(c * (1 - pct / 100)).toFixed(1)}"/></svg>
+      <div class="label"><div><b>${pct}%</b><span>${label}</span></div></div></div>`;
+  }
+  function miniRing(done, total) {
+    const r = 15; const c = 2 * Math.PI * r; const f = total ? Math.min(1, done / total) : 0;
+    return `<span class="mini-ring"><svg viewBox="0 0 36 36"><circle class="track" cx="18" cy="18" r="${r}"/>
+      <circle class="fill" cx="18" cy="18" r="${r}" stroke-dasharray="${c.toFixed(1)}" stroke-dashoffset="${(c * (1 - f)).toFixed(1)}"/></svg><span>${done}/${total}</span></span>`;
+  }
+
+  // ---------------------------------------------------------------- monthly gym edit
+  const editUrls = new Map();
+  const prevMonthKey = () => { const d = new Date(); return keyOf(new Date(d.getFullYear(), d.getMonth() - 1, 1)).slice(0, 7); };
+  const monthCheckins = (mo) => [...state.checkins.values()].filter((r) => r.month === mo).sort((a, b) => (a.date < b.date ? -1 : 1));
+  const canEdit = (mo) => monthCheckins(mo).length >= 3;
+  const defaultTemplate = (mo) => GymEdit.ORDER[(Number(mo.slice(5)) - 1) % GymEdit.ORDER.length];
+  async function editUrl(mo) {
+    if (editUrls.has(mo)) return editUrls.get(mo);
+    const rec = await DB.get('edits', mo);
+    if (!rec) return null;
+    const u = URL.createObjectURL(rec.blob);
+    editUrls.set(mo, u);
+    return u;
+  }
+  function dropEditUrl(mo) { const u = editUrls.get(mo); if (u) URL.revokeObjectURL(u); editUrls.delete(mo); }
+
+  async function collectCheckins(mo) {
+    const out = [];
+    for (const r of monthCheckins(mo)) {
+      const full = r.hasFull ? await DB.get('photos', r.date) : null;
+      const blob = full ? full.blob : r.thumb;
+      if (blob) out.push({ key: r.date, blob });
+    }
+    return out;
+  }
+  function monthEditStats(mo) {
+    const [y, m] = mo.split('-').map(Number);
+    const today = todayKey();
+    const st = monthStats(y, m - 1);
+    const days = new Date(y, m, 0).getDate();
+    const status = {};
+    let best = 0; let run = 0;
+    for (let d = 1; d <= days; d++) {
+      const k = keyOf(new Date(y, m - 1, d));
+      status[d] = dayStatus(k, today);
+      if (state.checkins.has(k)) { run++; best = Math.max(best, run); } else if (k <= today) run = 0;
+    }
+    return { sessions: monthCheckins(mo).length, pct: st.due ? Math.round((st.done / st.due) * 100) : 100, best, status };
+  }
+
+  function editProgressHtml(job) {
+    return `<div class="muted small js-edit-stage">${esc(job.stage || '')}</div>
+      <div class="edit-live js-edit-live"></div>
+      <div class="edit-progress"><span class="js-edit-bar" style="width:${Math.round((job.progress || 0) * 100)}%"></span></div>
+      ${job.status === 'needs-tap' ? `<button class="btn primary block" style="margin-top:12px" data-action="edit-go">Tap to create the edit</button>` : '<div class="muted small" style="margin-top:8px">Keep the app open, it records in real time (30 s).</div>'}`;
+  }
+  function editResultHtml(mo, url, rec) {
+    return `<video class="edit-video" src="${url}" controls playsinline loop preload="metadata"></video>
+      <div class="edit-actions">
+        <button class="btn primary small" data-action="edit-download" data-month="${mo}">${ICON.download}Download</button>
+        ${navigator.share ? `<button class="btn small" data-action="edit-share" data-month="${mo}">Share</button>` : ''}
+        <button class="btn small ghost" data-action="studio" data-month="${mo}">Other styles</button>
+      </div>
+      <div class="muted small" style="text-align:center;margin-top:8px">${esc(GymEdit.TEMPLATES[rec.template] ? GymEdit.TEMPLATES[rec.template].name : '')} · ${rec.music === 'song' ? 'your song' : 'original phonk beat'} · ${rec.ext.toUpperCase()} · ${fmtBytes(rec.blob.size)}</div>`;
+  }
+
+  // Home card: last month's edit (auto-created once the month is over)
+  async function editCardHtml() {
+    state.autoEditMonth = null;
+    if (!window.GymEdit) return '';
+    const job = state.editJob;
+    if (job && !(state.sheetStudio === job.month)) {
+      return `<section class="edit-card"><span class="eyebrow lime">Monthly gym edit</span><h3>${monthLabel(job.month)}</h3>${editProgressHtml(job)}</section>`;
+    }
+    const mo = prevMonthKey();
+    if (await DB.meta(`editHidden:${mo}`, false)) return '';
+    const rec = await DB.get('edits', mo);
+    if (rec) {
+      const url = await editUrl(mo);
+      return `<section class="edit-card"><div class="row between"><span class="eyebrow lime">Your monthly gym edit</span>
+        <button class="icon-btn" style="width:34px;height:34px" data-action="edit-hide" data-month="${mo}" aria-label="Hide">✕</button></div>
+        <h3>${monthLabel(mo)}</h3>${editResultHtml(mo, url, rec)}</section>`;
+    }
+    if (canEdit(mo) && GymEdit.supported()) {
+      state.autoEditMonth = mo;
+      return `<section class="edit-card"><span class="eyebrow lime">Monthly gym edit</span><h3>${monthLabel(mo)}</h3>
+        <div class="muted small">${monthCheckins(mo).length} check-in photos found. Creating your 30-second edit…</div></section>`;
+    }
+    return '';
+  }
+
+  function afterTodayRender() {
+    placeEditCanvas();
+    const mo = state.autoEditMonth;
+    if (!state.editJob && mo && !state.editTried.has(mo)) {
+      state.editTried.add(mo);
+      startEditJob({ month: mo, template: defaultTemplate(mo), auto: true });
+    }
+  }
+  function placeEditCanvas() {
+    const job = state.editJob;
+    if (!job) return;
+    const slots = $$('.js-edit-live');
+    const slot = slots[slots.length - 1];
+    if (slot && !slot.contains(job.canvas)) slot.appendChild(job.canvas);
+  }
+  function updateEditProgress() {
+    const job = state.editJob;
+    if (!job) return;
+    $$('.js-edit-bar').forEach((b) => { b.style.width = `${Math.round(job.progress * 100)}%`; });
+    $$('.js-edit-stage').forEach((e) => { e.textContent = job.progress > 0 ? `${job.stage} ${Math.round(job.progress * 30)} / 30 s` : job.stage; });
+  }
+  function refreshEditViews() {
+    if (state.sheetStudio) openEditStudio(state.sheetStudio);
+    else if (state.tab === 'today' || state.tab === 'calendar') render();
+    setTimeout(placeEditCanvas, 50);
+  }
+
+  async function startEditJob({ month, template, song = null, auto = false }) {
+    if (state.editJob) { toast('An edit is already being made'); return; }
+    if (!GymEdit.supported()) { toast('This browser cannot make videos. Update Chrome and try again.'); return; }
+    const canvas = document.createElement('canvas');
+    canvas.className = 'edit-canvas';
+    const job = { month, template, song, auto, canvas, progress: 0, stage: 'Starting…', status: 'starting' };
+    state.editJob = job;
+    const ac = new (window.AudioContext || window.webkitAudioContext)();
+    if (ac.state !== 'running') {
+      try { await Promise.race([ac.resume(), new Promise((r) => setTimeout(r, 400))]); } catch (_) { /* needs a tap */ }
+    }
+    if (ac.state !== 'running') {
+      job.status = 'needs-tap'; job.stage = 'Ready when you are.'; job.ac = ac;
+      refreshEditViews();
+      return;
+    }
+    refreshEditViews();
+    runEditJob(job, ac);
+  }
+
+  async function runEditJob(job, ac) {
+    job.status = 'running';
+    try {
+      const checkins = await collectCheckins(job.month);
+      const res = await GymEdit.render({
+        template: job.template, month: job.month, checkins, stats: monthEditStats(job.month), song: job.song,
+        canvas: job.canvas, audioContext: ac,
+        onProgress: (p) => { job.progress = p; updateEditProgress(); },
+        onStage: (st) => { job.stage = st; updateEditProgress(); placeEditCanvas(); }
+      });
+      await DB.put('edits', { month: job.month, template: job.template, music: job.song ? 'song' : 'beat', blob: res.blob, mime: res.mime, ext: res.ext, createdAt: Date.now() });
+      await DB.setMeta(`editHidden:${job.month}`, false);
+      dropEditUrl(job.month);
+      state.editJob = null;
+      vibrate([80, 60, 120]);
+      toast(`${monthLabel(job.month)} gym edit is ready`);
+    } catch (e) {
+      state.editJob = null;
+      if (e && e.message === 'interrupted') {
+        state.editTried.delete(job.month);
+        toast('Edit paused because the app was closed. It will restart when you come back.');
+      } else {
+        toast(`Couldn't make the edit: ${(e && e.message) || e}`);
+      }
+    } finally {
+      ac.close().catch(() => {});
+      refreshEditViews();
+    }
+  }
+
+  // Edit studio (sheet): watch, choose a style or your own song, re-create
+  async function openEditStudio(mo, push = true) {
+    const sheet = $('#sheet');
+    sheetCtx = null;
+    state.sheetStudio = mo;
+    state.studioTpl = state.studioTpl || defaultTemplate(mo);
+    $('#sheet-title').innerHTML = `Gym edit<small>${monthLabel(mo)} · ${monthCheckins(mo).length} check-in photos</small>`;
+    const job = state.editJob;
+    const rec = await DB.get('edits', mo);
+    let html = '';
+    if (job && job.month === mo) {
+      html += `<div class="edit-card">${editProgressHtml(job)}</div>`;
+    } else if (rec) {
+      html += `<div class="edit-card">${editResultHtml(mo, await editUrl(mo), rec)}
+        <div style="text-align:center;margin-top:10px"><button class="btn small danger" data-action="edit-delete" data-month="${mo}">Delete this edit</button></div></div>`;
+    }
+    const enough = canEdit(mo);
+    html += `<div class="section-h">${rec ? 'Make another version' : 'Make your edit'}</div>
+      <div class="tpl-grid">${GymEdit.ORDER.map((k) => {
+        const tpl = GymEdit.TEMPLATES[k];
+        return `<button class="tpl ${state.studioTpl === k ? 'active' : ''}" data-action="tpl" data-t="${k}"><span class="bpm">${tpl.bpm} BPM · 30 S</span><b>${tpl.name}</b><p>${esc(tpl.desc)}</p></button>`;
+      }).join('')}</div>
+      <div class="section-h">Music</div>
+      <div class="music-opts">
+        <label><input type="radio" name="music" value="beat" ${state.studioSong ? '' : 'checked'}> <b>Original phonk beat</b><div class="muted small">Made by the app for this style. Copyright-free.</div></label>
+        <label><input type="radio" name="music" value="song" ${state.studioSong ? 'checked' : ''}> <b>My own song</b><div class="muted small" id="song-name">${state.studioSong ? esc(state.studioSong.name) : 'Pick an audio file from your phone'}</div>
+          <input type="file" accept="audio/*" id="song-file" hidden></label>
+      </div>
+      <button class="btn primary block" style="margin-top:16px" data-action="edit-create" data-month="${mo}" ${enough && !job ? '' : 'disabled'}>Create 30-second edit</button>
+      <p class="muted small">${enough ? 'Keep the app open while it records (about 30 seconds). Everything happens on your phone.' : 'You need at least 3 check-in photos in this month.'}
+      ${state.studioSong ? ' Your own song is used only on this phone; don’t post edits with songs you don’t have rights to.' : ''}</p>`;
+    $('#sheet-body').innerHTML = html;
+    if (sheet.hidden) {
+      sheet.hidden = false;
+      sheet.classList.remove('closing');
+      document.body.style.overflow = 'hidden';
+      document.body.classList.add('sheet-open');
+      if (push) pushOverlay(closeSheet);
+    }
+    placeEditCanvas();
+  }
+
+  async function downloadEdit(mo) {
+    const rec = await DB.get('edits', mo);
+    if (!rec) return;
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(rec.blob);
+    a.download = `gym-edit-${mo}.${rec.ext}`;
+    document.body.appendChild(a); a.click();
+    setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 4000);
+  }
+  async function shareEdit(mo) {
+    const rec = await DB.get('edits', mo);
+    if (!rec) return;
+    const file = new File([rec.blob], `gym-edit-${mo}.${rec.ext}`, { type: rec.mime });
+    try {
+      if (navigator.canShare && navigator.canShare({ files: [file] })) await navigator.share({ files: [file], title: `${monthLabel(mo)} gym edit` });
+      else downloadEdit(mo);
+    } catch (_) { /* share cancelled */ }
   }
 
   async function warmupHtml(sKey, main, phase) {
@@ -329,6 +581,7 @@
 
   async function openExercise(exId, ctx = null, push = true) {
     sheetCtx = { exId, ctx };
+    state.sheetStudio = null;
     const sheet = $('#sheet');
     const phase = phaseOf(programWeek());
     const item = ctx && ctx.item;
@@ -425,7 +678,9 @@
       document.body.style.overflow = '';
       document.body.classList.remove('sheet-open');
       sheetCtx = null;
-      if (state.tab === 'today' || state.tab === 'progress') render();
+      const wasStudio = state.sheetStudio;
+      state.sheetStudio = null;
+      if (state.tab === 'today' || state.tab === 'progress' || (wasStudio && state.tab === 'calendar')) render();
     }, 200);
   }
 
@@ -846,7 +1101,9 @@
     }
     for (const mo of [...byMonth.keys()].sort().reverse()) {
       const list = byMonth.get(mo).sort((a, b) => (a.date < b.date ? 1 : -1));
-      html += `<div class="month-head"><div><b>${monthLabel(mo)}</b> <span class="muted small">· ${list.length} photo${list.length === 1 ? '' : 's'}</span></div></div>
+      const hasEdit = !!(await DB.get('edits', mo));
+      html += `<div class="month-head"><div><b>${monthLabel(mo)}</b> <span class="muted small">· ${list.length} photo${list.length === 1 ? '' : 's'}</span></div>
+        ${window.GymEdit && list.length >= 3 ? `<button class="btn small ${hasEdit ? 'primary' : ''}" data-action="studio" data-month="${mo}">${ICON.film}${hasEdit ? 'Watch edit' : 'Gym edit'}</button>` : ''}</div>
         <div class="photo-grid">${list.map((r) => {
           const d = parseKey(r.date);
           const u = thumbUrl(r.date);
@@ -858,6 +1115,7 @@
     }
     html += `<p class="muted small">Photos never leave this phone. Once a finished month is downloaded, its full-size photos are erased ${ERASE_AFTER_DAYS} days later. Small thumbnails and all attendance marks are kept.</p>`;
     v.innerHTML = html;
+    placeEditCanvas();
   }
 
   async function pendingArchiveMonths() {
@@ -920,6 +1178,8 @@
       csv += `${k},${DOW[d.getDay()]},${dayStatus(k, today)},${rec ? fmtTime(rec.ts) : ''}\n`;
     }
     files.push({ name: `attendance-${mo}.csv`, data: csv, date: new Date() });
+    const edit = await DB.get('edits', mo);
+    if (edit) files.push({ name: `gym-edit-${mo}.${edit.ext}`, data: edit.blob, date: new Date(edit.createdAt) });
     const blob = await Zip.build(files);
     const a = document.createElement('a');
     a.href = URL.createObjectURL(blob);
@@ -929,7 +1189,8 @@
     setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 4000);
     const prev = await DB.meta(`archive:${mo}`, {});
     await DB.setMeta(`archive:${mo}`, { ...prev, downloadedAt: Date.now() });
-    toast(`Downloaded ${files.length - 1} photo${files.length === 2 ? '' : 's'} (${fmtBytes(blob.size)})`);
+    const nPhotos = files.filter((f) => f.name.endsWith('.jpg')).length;
+    toast(`Downloaded ${nPhotos} photo${nPhotos === 1 ? '' : 's'}${edit ? ' + gym edit' : ''} (${fmtBytes(blob.size)})`);
     if (state.tab === 'calendar') render();
   }
 
@@ -1234,6 +1495,25 @@
         break;
       }
       case 'media-pause': t.classList.toggle('paused'); break;
+      case 'studio': openEditStudio(t.dataset.month, !state.sheetStudio && $('#sheet').hidden); break;
+      case 'tpl': state.studioTpl = t.dataset.t; $$('.tpl').forEach((x) => x.classList.toggle('active', x === t)); break;
+      case 'edit-create': {
+        const song = $('input[name="music"]:checked') && $('input[name="music"]:checked').value === 'song' ? state.studioSong : null;
+        if ($('input[name="music"]:checked') && $('input[name="music"]:checked').value === 'song' && !song) { toast('Pick a song file first'); $('#song-file').click(); break; }
+        startEditJob({ month: t.dataset.month, template: state.studioTpl, song });
+        break;
+      }
+      case 'edit-go': {
+        const job = state.editJob;
+        if (job && job.ac) { await job.ac.resume(); refreshEditViews(); runEditJob(job, job.ac); }
+        break;
+      }
+      case 'edit-download': downloadEdit(t.dataset.month); break;
+      case 'edit-share': shareEdit(t.dataset.month); break;
+      case 'edit-hide': await DB.setMeta(`editHidden:${t.dataset.month}`, true); toast('Hidden. Find it anytime in Attendance → Photos.'); render(); break;
+      case 'edit-delete':
+        if (confirm('Delete this gym edit video?')) { await DB.del('edits', t.dataset.month); dropEditUrl(t.dataset.month); openEditStudio(t.dataset.month, false); }
+        break;
       case 'att-view': state.attView = t.dataset.view; window.scrollTo(0, 0); render(); break;
       case 'photo': openPhoto(t.dataset.date); break;
       case 'photo-save': savePhoto(t.dataset.date); break;
@@ -1304,6 +1584,12 @@
       state.settings.programStart = e.target.value; await DB.setMeta('settings', state.settings); toast('Program start updated'); render();
     } else if (e.target.id === 'set-track' && e.target.value) {
       state.settings.trackStart = e.target.value; await DB.setMeta('settings', state.settings); toast('Attendance start updated'); render();
+    } else if (e.target.id === 'song-file' && e.target.files[0]) {
+      state.studioSong = e.target.files[0];
+      const n = $('#song-name'); if (n) n.textContent = state.studioSong.name;
+      const r = $('input[name="music"][value="song"]'); if (r) r.checked = true;
+    } else if (e.target.name === 'music' && e.target.value === 'song' && !state.studioSong) {
+      $('#song-file').click();
     } else if (e.target.id === 'import-file' && e.target.files[0]) {
       importData(e.target.files[0]);
     }

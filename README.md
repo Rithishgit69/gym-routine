@@ -26,6 +26,12 @@ Works offline once installed. No backend. All data (including photos) stays on t
 - Photo gallery grouped by month (newest first); full-screen viewer with swipe/arrows between days, save or delete
 - Monthly photo archive: download a month as a ZIP (photos + `attendance-YYYY-MM.csv`). Full-size photos of a finished month are erased 7 days after download; thumbnails and attendance are kept.
 
+**Monthly gym edits (auto-generated video)**
+- When a month ends, the app turns that month's check-in photos into a **30-second vertical video (720×1280)** and shows it on the home screen with Download and Share
+- 3 templates: **Phonk Drift** (150 BPM, beat-synced cuts, zoom punches, glitch, "NO DAYS OFF" slams, stats outro), **Grind Mode** (130 BPM, B&W intro → drop, freeze frames, collage), **Calendar Stamp** (120 BPM, photos fly into their calendar day and get stamped, attendance ring)
+- Music is **original phonk-style beats synthesised in the browser** (cowbell riffs, distorted 808, drums, risers) with the Web Audio API, so nothing is copyrighted. Users can also pick their own song file.
+- Rendered entirely on-device: Canvas 2D + `MediaRecorder` (MP4 where supported, WebM otherwise); no server
+
 **Offline & install**
 - Installable from Chrome (Android and desktop) via *Add to Home screen* / *Install app*
 - Photos and animations load from GitHub when online and from an on-device cache when offline (one-tap "Save all for offline", ≈ 11 MB)
@@ -40,6 +46,8 @@ Works offline once installed. No backend. All data (including photos) stays on t
 | Offline | Service Worker: stale-while-revalidate app shell, network-first media with on-device cache fallback |
 | Camera | `getUserMedia` → Canvas (mirror, resize, timestamp overlay) → JPEG blobs + thumbnails |
 | Archives | Hand-written ZIP writer with CRC-32 (`js/zip.js`, ~100 lines) |
+| Video edits | `js/edit.js`: canvas templates + Web Audio synth (OfflineAudioContext) → `MediaRecorder` |
+| Design | "Athletic Dark": black + electric lime, Barlow Condensed display, Inter text (bundled, OFL) |
 | Data pipeline | `tools/build_exercises.py` generates `js/exercises.js` from two open datasets (pinned commits); `tools/photo_map.json` maps exercises to public-domain photos |
 
 ```
@@ -49,6 +57,8 @@ js/program.js         training program, progression rules, coach notes (cues + m
 js/exercises.js       generated exercise data (names, muscles, steps, media paths)
 js/db.js              IndexedDB wrapper
 js/zip.js             ZIP writer
+js/edit.js            monthly gym edit generator (templates + music synth + recorder)
+fonts/                Inter + Barlow Condensed (SIL OFL 1.1, licenses included)
 js/app.js             views, logger, timer, camera, calendar, archive
 sw.js                 service worker
 tools/build_exercises.py
@@ -79,4 +89,5 @@ Check-in photos, set logs and attendance are stored only in the browser's Indexe
 - Exercise data (names, muscles, instructions): [hasaneyldrm/exercises-dataset](https://github.com/hasaneyldrm/exercises-dataset), MIT License.
 - Exercise photos: [yuhonas/free-exercise-db](https://github.com/yuhonas/free-exercise-db), Unlicense (public domain).
 - Exercise animations and thumbnails: © [Gym visual](https://gymvisual.com/). They are **not included in this repository**; the app loads them from the dataset repository at runtime and caches them on the user's device. See `NOTICE.md`.
-- Training program, coach notes and app code: this repository (MIT).
+- Fonts: [Inter](https://github.com/rsms/inter) and [Barlow Condensed](https://github.com/jpt/barlow), SIL Open Font License 1.1 (`fonts/OFL-*.txt`).
+- Training program, coach notes, edit templates, music synth and app code: this repository (MIT).

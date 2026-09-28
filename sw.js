@@ -1,5 +1,5 @@
 /* Service worker: offline app shell + offline copy of exercise photos and animations. */
-const VERSION = 'v1.3.0';
+const VERSION = 'v2.0.0';
 const SHELL_CACHE = `shell-${VERSION}`;
 const MEDIA_CACHE = 'media-v1';
 const SHELL = [
@@ -10,7 +10,13 @@ const SHELL = [
   './js/program.js',
   './js/db.js',
   './js/zip.js',
+  './js/edit.js',
   './js/app.js',
+  './fonts/Inter-variable.woff2',
+  './fonts/BarlowCondensed-600.woff2',
+  './fonts/BarlowCondensed-700.woff2',
+  './fonts/BarlowCondensed-800.woff2',
+  './fonts/BarlowCondensed-800italic.woff2',
   './manifest.webmanifest',
   './icons/icon-192.png',
   './icons/icon-512.png',
