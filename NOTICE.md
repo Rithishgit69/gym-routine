@@ -17,3 +17,10 @@ The app requests them from the dataset repository at runtime and, when the
 user chooses, caches them in the user's own browser for offline use.
 Use of the media is governed by Gym visual's Terms & Conditions:
 https://gymvisual.com/content/3-terms-and-conditions-of-use
+
+## Exercise photos
+
+Start/finish photos come from **yuhonas/free-exercise-db**
+(https://github.com/yuhonas/free-exercise-db, commit f00c92c7dcf1216a928a52c3706c7ce8e2f71ed5),
+released under the Unlicense (public domain). They are loaded at runtime and
+optionally cached on the user's device.

@@ -303,3 +303,19 @@ body.sheet-open .timer { bottom: calc(var(--safe-b) + 12px); }
 .viewer-cap { line-height: 1.35; }
 .viewer { touch-action: pan-y; }
 .mini-del { width: 28px; height: 28px; border-radius: 8px; border: 1px solid rgba(255, 93, 93, 0.35); background: transparent; color: var(--bad); font-size: 12px; line-height: 1; flex: none; }
+
+/* ---------- exercise media: photo loop + animation ---------- */
+.media-toggle { max-width: 260px; margin: 0 auto 10px; }
+.media.photo { aspect-ratio: 3 / 2; max-width: 600px; background: #111; cursor: pointer; }
+.media.photo img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+.media.photo img.b { animation: xfade 3.2s ease-in-out infinite; }
+.media.photo .phase-tag { position: absolute; left: 8px; top: 8px; font-size: 11px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; }
+.media.photo .phase-tag i { font-style: normal; position: absolute; left: 0; top: 0; white-space: nowrap; padding: 3px 8px; border-radius: 99px; background: rgba(0, 0, 0, 0.6); color: #fff; }
+.media.photo .phase-tag .s { animation: xfade-inv 3.2s ease-in-out infinite; }
+.media.photo .phase-tag .e { animation: xfade 3.2s ease-in-out infinite; }
+.media.photo .credit { color: rgba(255, 255, 255, 0.75); text-shadow: 0 1px 2px rgba(0, 0, 0, 0.7); }
+.media.photo.paused img.b, .media.photo.paused .phase-tag i { animation-play-state: paused; }
+.media.anim { max-width: 260px; }
+.media-hint { text-align: center; margin-top: 6px; }
+@keyframes xfade { 0%, 38% { opacity: 0; } 50%, 88% { opacity: 1; } 100% { opacity: 0; } }
+@keyframes xfade-inv { 0%, 38% { opacity: 1; } 50%, 88% { opacity: 0; } 100% { opacity: 1; } }

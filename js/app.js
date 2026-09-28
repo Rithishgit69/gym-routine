@@ -28,6 +28,38 @@
   const titleCase = (s) => s.replace(/\b\w/g, (c) => c.toUpperCase());
   const exName = (id) => P.names[id] || titleCase(EX[id].name);
   const mediaUrl = (id, kind) => BASE + EX[id][kind];
+  const photoUrls = (id) => (EX[id].photos ? EX[id].photos.map((p) => window.PHOTO_BASE + p) : null);
+  function getMediaMode() {
+    try { return localStorage.getItem('mediaMode') || 'photo'; } catch (_) { return 'photo'; }
+  }
+  function setMediaMode(m) {
+    try { localStorage.setItem('mediaMode', m); } catch (_) { /* private mode */ }
+  }
+  const OFFLINE_MSG = '<div class="offline">Not saved on this phone yet.<br>Connect to the internet once, or use Settings → Save for offline.</div>';
+
+  // Exercise media: sharp start/finish photos (default) or the original animation
+  function mediaHtml(exId) {
+    const photos = photoUrls(exId);
+    const mode = photos ? getMediaMode() : 'anim';
+    const toggle = photos
+      ? `<div class="seg two media-toggle"><button class="${mode === 'photo' ? 'active' : ''}" data-action="media-mode" data-mode="photo">Photos</button>
+         <button class="${mode === 'anim' ? 'active' : ''}" data-action="media-mode" data-mode="anim">Animation</button></div>`
+      : '';
+    const body = mode === 'photo'
+      ? `<div class="media photo" data-action="media-pause" role="img" aria-label="${esc(exName(exId))}: start and finish positions">
+          <img src="${photos[0]}" alt="" crossorigin="anonymous" data-role="media">
+          <img class="b" src="${photos[1]}" alt="" crossorigin="anonymous" data-role="media">
+          <span class="phase-tag"><i class="s">Start</i><i class="e">Finish</i></span>
+          <span class="credit">Photo: free-exercise-db</span></div>`
+      : `<div class="media anim"><img src="${mediaUrl(exId, 'gif')}" alt="${esc(exName(exId))} animation" crossorigin="anonymous" data-role="media"><span class="credit">© Gym visual</span></div>`;
+    return toggle + body + (mode === 'photo' ? '<div class="muted small media-hint">Loops start ↔ finish. Tap to pause.</div>' : '');
+  }
+  function bindMediaErrors(root) {
+    $$('[data-role="media"]', root).forEach((img) => img.addEventListener('error', () => {
+      const box = img.closest('.media');
+      if (box && !$('.offline', box)) box.insertAdjacentHTML('beforeend', OFFLINE_MSG);
+    }, { once: true }));
+  }
   const monthKey = (k) => k.slice(0, 7);
   const monthLabel = (m) => { const [y, mo] = m.split('-').map(Number); return `${MONTHS[mo - 1]} ${y}`; };
   const monthEnd = (m) => { const [y, mo] = m.split('-').map(Number); return new Date(y, mo, 0, 23, 59, 59, 999); };
@@ -261,7 +293,7 @@
       <div class="progress" style="margin-bottom:12px"><span style="width:${totalSets ? (setsDone / totalSets) * 100 : 0}%"></span></div>
       ${warm}
       <div class="ex-list">${rows.join('')}</div>
-      <p class="muted small" style="margin-top:14px">Tap an exercise for the animation, how to do it, common mistakes and the set logger. Animations © Gym visual.</p>`;
+      <p class="muted small" style="margin-top:14px">Tap an exercise for photos and animation, how to do it, common mistakes and the set logger.</p>`;
   }
 
   async function warmupHtml(sKey, main, phase) {
@@ -340,9 +372,9 @@
         ${item.inc === 'bodyweight' ? '<div class="muted small" style="margin:-4px 0 8px">Bodyweight: enter 0 kg, added weight as +kg, or assistance as a minus number.</div>' : ''}
         <div class="set-head"><span></span><span>Weight</span><span>Reps</span><span>Done</span></div>
         <div class="sets" id="sets">${rows}</div>
-        <div class="row between" style="margin-top:8px">
-          <button class="btn small ghost" data-action="add-set">+ Add set</button>
-          <span class="muted small">Tapped ✓ by mistake? Tap it again to undo.</span></div>`;
+        <div class="row between" style="margin-top:8px;align-items:center">
+          <button class="btn small ghost" style="white-space:nowrap;flex:none" data-action="add-set">+ Add set</button>
+          <span class="muted small" style="text-align:right">Wrong tap? Tap ✓ again to undo.</span></div>`;
     }
 
     const hist = (await exHistory(exId)).filter((l) => l.date < todayKey()).slice(0, 5);
@@ -358,7 +390,7 @@
       : '';
 
     $('#sheet-body').innerHTML = `
-      <div class="media"><img src="${mediaUrl(exId, 'gif')}" alt="${esc(exName(exId))} animation" crossorigin="anonymous" data-role="gif"><span class="credit">© Gym visual</span></div>
+      <div id="media-slot">${mediaHtml(exId)}</div>
       ${presc}
       ${logger}
       <div class="section-h">How to do it</div>
@@ -369,12 +401,9 @@
       <dl class="kv"><dt>Target</dt><dd>${esc(x.target)}</dd><dt>Also works</dt><dd>${esc(x.secondary.join(', ') || '—')}</dd><dt>Equipment</dt><dd>${esc(x.equipment)}</dd></dl>
       ${swapHtml}
       <div class="section-h">Previous sessions</div>${histHtml}
-      <p class="muted small" style="margin-top:18px">Instructions: exercises-dataset (MIT). Animation © Gym visual, gymvisual.com. Dataset ID #${exId}.</p>`;
+      <p class="muted small" style="margin-top:18px">Instructions: exercises-dataset (MIT). Photos: free-exercise-db (public domain). Animation © Gym visual, gymvisual.com. Dataset ID #${exId}.</p>`;
 
-    const gif = $('[data-role="gif"]', sheet);
-    gif.addEventListener('error', () => {
-      gif.insertAdjacentHTML('afterend', '<div class="offline">Animation not saved on this phone yet.<br>Connect to the internet once, or use Settings → Save animations for offline.</div>');
-    }, { once: true });
+    bindMediaErrors(sheet);
 
     if (sheet.hidden) {
       sheet.hidden = false;
@@ -1054,7 +1083,7 @@
   }
 
   // ---------------------------------------------------------------- render: settings
-  const allMediaUrls = () => Object.keys(EX).flatMap((id) => [mediaUrl(id, 'gif'), mediaUrl(id, 'img')]);
+  const allMediaUrls = () => Object.keys(EX).flatMap((id) => [mediaUrl(id, 'gif'), mediaUrl(id, 'img'), ...(photoUrls(id) || [])]);
 
   async function mediaStatus() {
     if (!('caches' in window)) return { have: 0, total: allMediaUrls().length };
@@ -1090,13 +1119,13 @@
         <div class="field"><span>This week</span><b>${week > 0 ? `Week ${week} · ${phaseOf(week).label}` : 'Not started'}</b></div>
         <div class="field"><span>Routine order</span><b>Push → Pull → Legs → Upper</b></div>
       </div>
-      <div class="section-h">Offline animations</div>
+      <div class="section-h">Offline photos &amp; animations</div>
       <div class="card">
-        <div class="small">With mobile data, animations load from GitHub. Without data, the app uses the copy saved on this phone.</div>
+        <div class="small">With mobile data, photos and animations load from GitHub. Without data, the app uses the copy saved on this phone.</div>
         <div class="field"><span>Saved on this phone</span><b id="media-count">${ms.have}/${ms.total} files</b></div>
         <div class="bar"><span id="media-bar" style="width:${(ms.have / ms.total) * 100}%"></span></div>
         <div class="row" style="margin-top:12px;gap:8px">
-          <button class="btn primary" data-action="save-media" ${ms.have === ms.total ? 'disabled' : ''}>${ms.have === ms.total ? 'All saved' : 'Save all (≈ 5 MB)'}</button>
+          <button class="btn primary" data-action="save-media" ${ms.have === ms.total ? 'disabled' : ''}>${ms.have === ms.total ? 'All saved' : 'Save all (≈ 11 MB)'}</button>
           ${ms.have ? '<button class="btn ghost" data-action="clear-media">Remove</button>' : ''}
         </div>
       </div>
@@ -1117,7 +1146,7 @@
       <div class="card"><button class="btn danger block" data-action="reset">Erase all data on this phone</button></div>
       <div class="section-h">About</div>
       <div class="card small muted">
-        Exercise data: <b>hasaneyldrm/exercises-dataset</b> (MIT). Animations © <b>Gym visual</b> (gymvisual.com), loaded from the dataset repo and not redistributed.<br><br>
+        Exercise data: <b>hasaneyldrm/exercises-dataset</b> (MIT). Photos: <b>yuhonas/free-exercise-db</b> (public domain). Animations © <b>Gym visual</b> (gymvisual.com), loaded from the dataset repo and not redistributed.<br><br>
         Program: 3 upper days + 1 leg day, no deadlifts. Progression: when every set reaches the top of the rep range, add weight next session.
       </div>`;
   }
@@ -1149,7 +1178,7 @@
       }
     };
     await Promise.all(Array.from({ length: 6 }, worker));
-    toast(failed ? `Saved ${have}. ${failed} failed (check your connection).` : 'All animations saved for offline use');
+    toast(failed ? `Saved ${have}. ${failed} failed (check your connection).` : 'All photos and animations saved for offline use');
     render();
   }
 
@@ -1198,6 +1227,13 @@
       case 'goto': go(t.dataset.tab); break;
       case 'checkin': openCamera(); break;
       case 'session': state.session = t.dataset.s; state.sessionPicked = true; render(); break;
+      case 'media-mode': {
+        setMediaMode(t.dataset.mode);
+        const slot = $('#media-slot');
+        if (slot && sheetCtx) { slot.innerHTML = mediaHtml(sheetCtx.exId); bindMediaErrors(slot); }
+        break;
+      }
+      case 'media-pause': t.classList.toggle('paused'); break;
       case 'att-view': state.attView = t.dataset.view; window.scrollTo(0, 0); render(); break;
       case 'photo': openPhoto(t.dataset.date); break;
       case 'photo-save': savePhoto(t.dataset.date); break;
@@ -1243,7 +1279,7 @@
         if (confirm(`Erase full-size ${monthLabel(t.dataset.month)} photos from this phone? Make sure the ZIP is saved. Thumbnails and attendance stay.`)) eraseMonth(t.dataset.month);
         break;
       case 'save-media': saveMedia(); break;
-      case 'clear-media': await caches.delete(MEDIA_CACHE); toast('Offline animations removed'); render(); break;
+      case 'clear-media': await caches.delete(MEDIA_CACHE); toast('Offline copy removed'); render(); break;
       case 'install':
         if (state.installPrompt) { state.installPrompt.prompt(); await state.installPrompt.userChoice; state.installPrompt = null; render(); }
         break;

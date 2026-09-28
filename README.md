@@ -8,7 +8,7 @@ Works offline once installed. No backend. All data (including photos) stays on t
 
 **Workout guide**
 - No fixed weekdays: sessions rotate Push → Pull → Legs → Upper (3 upper days + 1 leg day, no deadlifts). The app works out what's next from the last workout you logged and reminds you on the home screen.
-- 28 planned exercises plus swap options, 46 exercises in total, each with an animation, step-by-step instructions, key cues and common mistakes
+- 28 planned exercises plus swap options, 46 exercises in total, each with sharp start/finish photos (looping crossfade) or the original animation, step-by-step instructions, key cues and common mistakes
 - Program phases computed from the start date: *Learn* (weeks 1–2), *Build*, *Deload* (week 9, then every 7 weeks), with sets and RIR adjusted automatically
 - Warm-up ramp sets calculated from the last working weight
 - "Machine busy?" swap suggestions for every exercise
@@ -28,7 +28,7 @@ Works offline once installed. No backend. All data (including photos) stays on t
 
 **Offline & install**
 - Installable from Chrome (Android and desktop) via *Add to Home screen* / *Install app*
-- Animations load from GitHub when online and from an on-device cache when offline (one-tap "Save all for offline", ≈ 5 MB)
+- Photos and animations load from GitHub when online and from an on-device cache when offline (one-tap "Save all for offline", ≈ 11 MB)
 - JSON backup export/import (attendance, logs, settings)
 
 ## Tech
@@ -40,7 +40,7 @@ Works offline once installed. No backend. All data (including photos) stays on t
 | Offline | Service Worker: stale-while-revalidate app shell, network-first media with on-device cache fallback |
 | Camera | `getUserMedia` → Canvas (mirror, resize, timestamp overlay) → JPEG blobs + thumbnails |
 | Archives | Hand-written ZIP writer with CRC-32 (`js/zip.js`, ~100 lines) |
-| Data pipeline | `tools/build_exercises.py` generates `js/exercises.js` from the open exercise dataset (pinned commit) |
+| Data pipeline | `tools/build_exercises.py` generates `js/exercises.js` from two open datasets (pinned commits); `tools/photo_map.json` maps exercises to public-domain photos |
 
 ```
 index.html            app shell
@@ -66,7 +66,8 @@ Regenerate exercise data:
 
 ```bash
 git clone --depth 1 https://github.com/hasaneyldrm/exercises-dataset /tmp/exercises-dataset
-python3 tools/build_exercises.py /tmp/exercises-dataset/data/exercises.json
+curl -L https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/dist/exercises.json -o /tmp/free-exercise-db.json
+python3 tools/build_exercises.py /tmp/exercises-dataset/data/exercises.json /tmp/free-exercise-db.json
 ```
 
 ## Privacy
@@ -76,5 +77,6 @@ Check-in photos, set logs and attendance are stored only in the browser's Indexe
 ## Credits
 
 - Exercise data (names, muscles, instructions): [hasaneyldrm/exercises-dataset](https://github.com/hasaneyldrm/exercises-dataset), MIT License.
-- Exercise animations and images: © [Gym visual](https://gymvisual.com/). They are **not included in this repository**; the app loads them from the dataset repository at runtime and caches them on the user's device. See `NOTICE.md`.
+- Exercise photos: [yuhonas/free-exercise-db](https://github.com/yuhonas/free-exercise-db), Unlicense (public domain).
+- Exercise animations and thumbnails: © [Gym visual](https://gymvisual.com/). They are **not included in this repository**; the app loads them from the dataset repository at runtime and caches them on the user's device. See `NOTICE.md`.
 - Training program, coach notes and app code: this repository (MIT).

@@ -1,5 +1,5 @@
-/* Service worker: offline app shell + offline copy of exercise animations. */
-const VERSION = 'v1.2.0';
+/* Service worker: offline app shell + offline copy of exercise photos and animations. */
+const VERSION = 'v1.3.0';
 const SHELL_CACHE = `shell-${VERSION}`;
 const MEDIA_CACHE = 'media-v1';
 const SHELL = [
@@ -45,7 +45,9 @@ self.addEventListener('fetch', (event) => {
   const url = new URL(req.url);
 
   // Exercise animations: network first (fresh from GitHub when online), offline copy otherwise.
-  if (url.hostname === 'raw.githubusercontent.com' && url.pathname.startsWith('/hasaneyldrm/exercises-dataset/')) {
+  const isMedia = url.hostname === 'raw.githubusercontent.com' &&
+    (url.pathname.startsWith('/hasaneyldrm/exercises-dataset/') || url.pathname.startsWith('/yuhonas/free-exercise-db/'));
+  if (isMedia) {
     event.respondWith((async () => {
       const cache = await caches.open(MEDIA_CACHE);
       try {
