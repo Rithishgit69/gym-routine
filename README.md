@@ -7,7 +7,7 @@ Works offline once installed. No backend. All data (including photos) stays on t
 ## Features
 
 **Workout guide**
-- Today's session picked automatically: Mon Push · Tue Pull · Thu Legs · Fri Upper (3 upper days + 1 leg day, no deadlifts)
+- No fixed weekdays: sessions rotate Push → Pull → Legs → Upper (3 upper days + 1 leg day, no deadlifts). The app works out what's next from the last workout you logged and reminds you on the home screen.
 - 28 planned exercises plus swap options, 46 exercises in total, each with an animation, step-by-step instructions, key cues and common mistakes
 - Program phases computed from the start date: *Learn* (weeks 1–2), *Build*, *Deload* (week 9, then every 7 weeks), with sets and RIR adjusted automatically
 - Warm-up ramp sets calculated from the last working weight
@@ -20,9 +20,10 @@ Works offline once installed. No backend. All data (including photos) stays on t
 - Progress tab: session history, estimated 1RM (Epley) with sparklines
 
 **Photo-verified attendance**
-- Check-in only via the **live in-app camera**. No gallery uploads. Each photo is stamped with date and time.
-- Animated calendar: boxes cascade in, today's box gets stamped ✓; missed gym days (Mon/Tue/Thu/Fri) get ✕; rest-day sessions count as bonus
-- Streaks and monthly attendance %
+- Check-in any day, only via the **live in-app camera**. No gallery uploads. Each photo is stamped with date and time.
+- Animated calendar: boxes cascade in, today's box gets stamped ✓; every past day without a check-in gets ✕
+- Day streaks and monthly attendance %
+- Photo gallery grouped by month (newest first); full-screen viewer with swipe/arrows between days, save or delete
 - Monthly photo archive: download a month as a ZIP (photos + `attendance-YYYY-MM.csv`). Full-size photos of a finished month are erased 7 days after download; thumbnails and attendance are kept.
 
 **Offline & install**

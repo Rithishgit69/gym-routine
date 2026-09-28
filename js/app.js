@@ -31,7 +31,6 @@
   const monthKey = (k) => k.slice(0, 7);
   const monthLabel = (m) => { const [y, mo] = m.split('-').map(Number); return `${MONTHS[mo - 1]} ${y}`; };
   const monthEnd = (m) => { const [y, mo] = m.split('-').map(Number); return new Date(y, mo, 0, 23, 59, 59, 999); };
-  const isGymDay = (d) => P.gymDays.includes(d.getDay());
   const round25 = (x) => Math.round(x / 2.5) * 2.5;
   const e1rm = (w, r) => (w > 0 && r > 0 ? w * (1 + r / 30) : 0);
 
@@ -105,15 +104,27 @@
     return item.rir;
   }
   const repText = (item) => `${item.reps[0]}–${item.reps[1]}${item.per ? ` ${item.per}` : ''}`;
-  const sessionFor = (d) => P.schedule[d.getDay()] || null;
-  function nextSession(from = new Date()) {
-    for (let i = 1; i <= 7; i++) {
-      const d = addDays(from, i);
-      const s = sessionFor(d);
-      if (s) return { key: s, date: d };
-    }
-    return null;
+  const daysBetween = (a, b) => Math.round((parseKey(b) - parseKey(a)) / 86400000);
+
+  // Routine follows the rotation (Push → Pull → Legs → Upper), not the weekday.
+  async function routineInfo() {
+    const today = todayKey();
+    const logs = (await DB.all('logs')).filter((l) => l.session && l.sets.some((x) => x.r > 0));
+    const todays = logs.filter((l) => l.date === today).sort((a, b) => (a.updatedAt || 0) - (b.updatedAt || 0));
+    const past = logs.filter((l) => l.date < today)
+      .sort((a, b) => (a.date === b.date ? (b.updatedAt || 0) - (a.updatedAt || 0) : a.date < b.date ? 1 : -1));
+    const last = past[0] || null;
+    const next = last ? P.order[(P.order.indexOf(last.session) + 1) % P.order.length] : P.order[0];
+    const lastCheckin = [...state.checkins.keys()].filter((k) => k < today).sort().pop() || null;
+    return {
+      current: todays.length ? todays[todays.length - 1].session : next,
+      trainingToday: todays.length > 0,
+      next,
+      last: last ? { session: last.session, date: last.date } : null,
+      daysSinceCheckin: lastCheckin ? daysBetween(lastCheckin, today) : null
+    };
   }
+  const ago = (n) => (n === 0 ? 'today' : n === 1 ? 'yesterday' : `${n} days ago`);
   const slotOf = (sessionKey, item) => `${sessionKey}:${item.n}`;
 
   // ---------------------------------------------------------------- logs
@@ -185,8 +196,8 @@
     const now = new Date();
     const week = programWeek(now);
     const phase = phaseOf(week);
-    const todaySession = sessionFor(now);
-    if (!state.session) state.session = todaySession || nextSession(now).key;
+    const rt = await routineInfo();
+    if (!state.sessionPicked) state.session = rt.current;
     const sKey = state.session;
     const S = P.sessions[sKey];
     await loadTodayLogs();
@@ -194,25 +205,27 @@
     setHeader(fmtDay(now), week > 0 ? `Week ${week} · ${phase.label}` : `Program starts ${fmtDate(parseKey(state.settings.programStart))}`);
 
     const ci = state.checkins.get(todayKey());
+    const nextS = P.sessions[rt.current];
+    const lastLine = rt.trainingToday
+      ? `You're training <b>${nextS.name}</b> today.`
+      : rt.last
+        ? `Last workout: ${P.sessions[rt.last.session].name}, ${ago(daysBetween(rt.last.date, todayKey()))}.`
+        : 'First workout: start the rotation with Push.';
+    const gap = !ci && rt.daysSinceCheckin !== null && rt.daysSinceCheckin >= 2
+      ? `<div class="small" style="color:var(--warn);margin-top:4px">No check-in for ${rt.daysSinceCheckin} days. Your routine is waiting.</div>` : '';
     const checkinHtml = ci
       ? `<div class="card checkin-card">
-          ${thumbUrl(todayKey()) ? `<img src="${thumbUrl(todayKey())}" alt="">` : ''}
+          ${thumbUrl(todayKey()) ? `<button class="photo-btn" data-action="photo" data-date="${todayKey()}" aria-label="View today's photo"><img src="${thumbUrl(todayKey())}" alt=""></button>` : ''}
           <div class="grow"><div class="card-title">Checked in at ${fmtTime(ci.ts)}</div>
-          <div class="muted small">Attendance marked for today${isGymDay(now) ? '' : ' (bonus rest-day session)'}.</div></div>
+          <div class="muted small">Routine today: <b>${nextS.name}</b> · ${esc(nextS.focus)}</div></div>
           <button class="btn small ghost" data-action="goto" data-tab="calendar">Calendar</button></div>`
-      : `<div class="card checkin-card">
-          <div class="grow"><div class="card-title">${isGymDay(now) ? 'Gym day: check in' : 'Rest day'}</div>
-          <div class="muted small">${isGymDay(now) ? 'Take a photo in the gym to mark attendance.' : 'Training anyway? A photo check-in counts as a bonus session.'}</div></div>
-          <button class="btn primary" data-action="checkin">${ICON.camera}Check in</button></div>`;
+      : `<div class="card reminder">
+          <div class="muted small" style="text-transform:uppercase;letter-spacing:.06em;font-weight:700">Your routine today</div>
+          <div class="reminder-title">${nextS.name} <span class="muted">· ${esc(nextS.focus)}</span></div>
+          <div class="muted small">${lastLine} ${nextS.items.length} exercises, ${nextS.duration}.</div>${gap}
+          <button class="btn primary block" style="margin-top:12px" data-action="checkin">${ICON.camera}Check in with a gym photo</button></div>`;
 
-    let restHtml = '';
-    if (!todaySession) {
-      const nx = nextSession(now);
-      restHtml = `<div class="card"><div class="card-title">Rest day</div>
-        <div class="muted small">Walk 6,000–8,000 steps. Next session: <b>${DOW_LONG[nx.date.getDay()]} · ${P.sessions[nx.key].name}</b>. You can preview any session below.</div></div>`;
-    }
-
-    const seg = P.order.map((k) => `<button class="${k === sKey ? 'active' : ''}" data-action="session" data-s="${k}">${P.sessions[k].name}${k === todaySession ? '<span class="dot"></span>' : ''}</button>`).join('');
+    const seg = P.order.map((k) => `<button class="${k === sKey ? 'active' : ''}" data-action="session" data-s="${k}">${P.sessions[k].name}${k === rt.current ? '<span class="dot"></span>' : ''}</button>`).join('');
 
     let totalSets = 0; let setsDone = 0; let doneEx = 0;
     const rows = [];
@@ -241,7 +254,6 @@
 
     v.innerHTML = `
       ${checkinHtml}
-      ${restHtml}
       <div class="card phase ${phase.key}"><div class="row between"><div class="card-title">${week > 0 ? `Week ${week}: ${phase.label}` : 'Before week 1'}</div><span class="pill">${S.duration}</span></div>
         <div class="muted small">${phase.note}</div></div>
       <div class="seg">${seg}</div>
@@ -622,6 +634,7 @@
     state.checkins.set(date, rec);
     if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(() => {});
     closeTop(); // closes the camera
+    state.attView = 'calendar';
     const d = new Date(when);
     state.calMonth = new Date(d.getFullYear(), d.getMonth(), 1);
     vibrate([60, 60, 120]);
@@ -629,15 +642,13 @@
   }
 
   // ---------------------------------------------------------------- attendance logic
+  // Every day counts: checked in = done, past day without a check-in = missed.
   function dayStatus(k, today) {
-    const rec = state.checkins.get(k);
-    const d = parseKey(k);
-    const gym = isGymDay(d);
-    if (rec) return gym ? 'done' : 'bonus';
-    if (k > today) return gym ? 'upcoming' : 'rest';
-    if (k === today) return gym ? 'due' : 'rest';
+    if (state.checkins.has(k)) return 'done';
+    if (k > today) return 'future';
+    if (k === today) return 'due';
     if (k < state.settings.trackStart) return 'none';
-    return gym ? 'missed' : 'rest';
+    return 'missed';
   }
 
   function streaks() {
@@ -646,7 +657,6 @@
     let best = 0; let run = 0;
     for (let d = new Date(start); keyOf(d) <= today; d = addDays(d, 1)) {
       const k = keyOf(d);
-      if (!isGymDay(d)) continue;
       if (state.checkins.has(k)) { run++; best = Math.max(best, run); } else if (k !== today) run = 0;
     }
     return { current: run, best };
@@ -654,22 +664,21 @@
 
   function monthStats(y, m) {
     const today = todayKey();
-    let due = 0; let done = 0; let bonus = 0;
+    let due = 0; let done = 0;
     const days = new Date(y, m + 1, 0).getDate();
     for (let i = 1; i <= days; i++) {
-      const d = new Date(y, m, i); const k = keyOf(d);
+      const k = keyOf(new Date(y, m, i));
       if (k > today || k < state.settings.trackStart) continue;
-      if (isGymDay(d)) {
-        if (k === today && !state.checkins.has(k)) continue;
-        due++;
-        if (state.checkins.has(k)) done++;
-      } else if (state.checkins.has(k)) bonus++;
+      if (k === today && !state.checkins.has(k)) continue;
+      due++;
+      if (state.checkins.has(k)) done++;
     }
-    return { due, done, bonus };
+    return { due, done };
   }
 
   // ---------------------------------------------------------------- render: calendar
   async function renderCalendar(v) {
+    if (state.attView === 'photos') return renderPhotos(v);
     const today = todayKey();
     if (!state.calMonth) { const n = new Date(); state.calMonth = new Date(n.getFullYear(), n.getMonth(), 1); }
     const y = state.calMonth.getFullYear(); const m = state.calMonth.getMonth();
@@ -677,7 +686,7 @@
     const sk = streaks();
     const anim = state.lastCheckinAnim;
     state.lastCheckinAnim = null;
-    setHeader('Attendance', `${state.checkins.size} check-in${state.checkins.size === 1 ? '' : 's'} · gym days Mon, Tue, Thu, Fri`);
+    setHeader('Attendance', `${state.checkins.size} check-in${state.checkins.size === 1 ? '' : 's'} · check in any day`);
 
     const first = new Date(y, m, 1);
     const lead = (first.getDay() + 6) % 7; // Monday first
@@ -688,7 +697,7 @@
     for (let i = 1; i <= days; i++) {
       const d = new Date(y, m, i); const k = keyOf(d);
       const s = dayStatus(k, today);
-      const mark = s === 'done' || s === 'bonus' ? ICON.tick : s === 'missed' ? ICON.cross : '';
+      const mark = s === 'done' ? ICON.tick : s === 'missed' ? ICON.cross : '';
       const stamp = anim === k ? ' stamp' : '';
       const extra = anim === k ? `;--stamp-delay:${idx * 22 + 450}ms` : '';
       cells += `<button class="cell ${s}${k === today ? ' today' : ''}${stamp}" style="--i:${idx++}${extra}" data-action="day" data-date="${k}" aria-label="${fmtDay(d)}: ${s}">
@@ -698,16 +707,21 @@
     const ci = state.checkins.get(today);
 
     let banner = '';
-    if (anim) banner = `<div class="banner"><b>Checked in!</b> ${fmtDay(parseKey(anim))} is marked. Current streak: ${sk.current} gym day${sk.current === 1 ? '' : 's'}.</div>`;
+    if (anim) {
+      banner = `<div class="banner row" style="gap:12px">${thumbUrl(anim) ? `<button class="photo-btn" data-action="photo" data-date="${anim}"><img src="${thumbUrl(anim)}" alt=""></button>` : ''}
+        <div><b>Checked in!</b> ${fmtDay(parseKey(anim))} is marked. Streak: ${sk.current} day${sk.current === 1 ? '' : 's'}.
+        <div><button class="link" data-action="photo" data-date="${anim}">View photo</button></div></div></div>`;
+    }
     const pending = await pendingArchiveMonths();
-    if (!anim && pending.length) banner = `<div class="banner warn"><b>${monthLabel(pending[0])} photos are ready.</b> Download the ZIP below to keep them.</div>`;
+    if (!anim && pending.length) banner = `<div class="banner warn"><b>${monthLabel(pending[0])} photos are ready.</b> <button class="link" data-action="att-view" data-view="photos">Open Photos</button> to download the ZIP.</div>`;
 
     v.innerHTML = `
+      ${attTabs()}
       ${banner}
       ${ci ? '' : `<button class="btn primary block" style="margin-bottom:12px" data-action="checkin">${ICON.camera}Check in with a gym photo</button>`}
       <div class="stats">
-        <div class="stat"><b>${st.done}/${st.due}</b><span>${MONTHS[m].slice(0, 3)} gym days${st.due ? ` · ${pct}%` : ''}</span></div>
-        <div class="stat"><b>${sk.current}</b><span>Current streak</span></div>
+        <div class="stat"><b>${st.done}/${st.due}</b><span>${MONTHS[m].slice(0, 3)} days${st.due ? ` · ${pct}%` : ''}</span></div>
+        <div class="stat"><b>${sk.current}</b><span>Day streak</span></div>
         <div class="stat"><b>${sk.best}</b><span>Best streak</span></div>
       </div>
       <div class="card">
@@ -716,19 +730,52 @@
           <h2>${MONTHS[m]} ${y}</h2>
           <button class="icon-btn" data-action="cal-next" aria-label="Next month">${ICON.right}</button>
         </div>
-        <div class="cal-week">${['M', 'T', 'W', 'T', 'F', 'S', 'S'].map((c, i) => `<div class="${[0, 1, 3, 4].includes(i) ? 'gym' : ''}">${c}</div>`).join('')}</div>
+        <div class="cal-week">${['M', 'T', 'W', 'T', 'F', 'S', 'S'].map((c) => `<div>${c}</div>`).join('')}</div>
         <div class="cal-grid ${anim ? 'cascade' : ''}" id="cal-grid">${cells}</div>
-        <div class="legend"><span><i class="l-done"></i>Checked in</span><span><i class="l-missed"></i>Missed</span><span><i class="l-up"></i>Gym day ahead</span><span><i class="l-rest"></i>Rest day</span></div>
-        ${st.bonus ? `<div class="muted small">+ ${st.bonus} bonus rest-day session${st.bonus === 1 ? '' : 's'} this month.</div>` : ''}
+        <div class="legend"><span><i class="l-done"></i>Checked in</span><span><i class="l-missed"></i>Missed</span><span><i class="l-today"></i>Today</span></div>
+        <div class="muted small">Tap a ticked day to see that day's photo.</div>
       </div>
-      <div class="section-h">Photo archive</div>
-      <div class="card" id="archive">${await archiveHtml()}</div>
-      <p class="muted small">Photos never leave this phone. Once a finished month is downloaded, its full-size photos are erased ${ERASE_AFTER_DAYS} days later. Small thumbnails and all attendance marks are kept.</p>`;
+      <button class="btn block" data-action="att-view" data-view="photos">View all photos (${state.checkins.size})</button>`;
 
     if (anim) {
       const cell = v.querySelector(`.cell[data-date="${anim}"]`);
       if (cell) setTimeout(() => vibrate(50), (+cell.style.getPropertyValue('--i') || 0) * 22 + 650);
     }
+  }
+
+  function attTabs() {
+    const v = state.attView || 'calendar';
+    return `<div class="seg two"><button class="${v === 'calendar' ? 'active' : ''}" data-action="att-view" data-view="calendar">Calendar</button>
+      <button class="${v === 'photos' ? 'active' : ''}" data-action="att-view" data-view="photos">Photos (${state.checkins.size})</button></div>`;
+  }
+
+  async function renderPhotos(v) {
+    setHeader('Attendance', `${state.checkins.size} photo${state.checkins.size === 1 ? '' : 's'} · newest first`);
+    const byMonth = new Map();
+    for (const r of state.checkins.values()) {
+      if (!byMonth.has(r.month)) byMonth.set(r.month, []);
+      byMonth.get(r.month).push(r);
+    }
+    let html = attTabs();
+    if (!byMonth.size) {
+      html += `<div class="card empty">No check-in photos yet.<br><br><button class="btn primary" data-action="checkin">${ICON.camera}Check in with a gym photo</button></div>`;
+      v.innerHTML = html;
+      return;
+    }
+    for (const mo of [...byMonth.keys()].sort().reverse()) {
+      const list = byMonth.get(mo).sort((a, b) => (a.date < b.date ? 1 : -1));
+      html += `<div class="month-head"><div><b>${monthLabel(mo)}</b> <span class="muted small">· ${list.length} photo${list.length === 1 ? '' : 's'}</span></div></div>
+        <div class="photo-grid">${list.map((r) => {
+          const d = parseKey(r.date);
+          const u = thumbUrl(r.date);
+          return `<button class="ph" data-action="photo" data-date="${r.date}" aria-label="Photo ${fmtDay(d)}">
+            ${u ? `<img src="${u}" alt="" loading="lazy">` : '<span class="ph-none">No photo</span>'}
+            <span class="ph-cap"><b>${d.getDate()} ${MONTHS[d.getMonth()].slice(0, 3)}</b> ${DOW[d.getDay()]} · ${fmtTime(r.ts)}</span></button>`;
+        }).join('')}</div>
+        <div class="card archive-card">${await archiveRow(mo, byMonth.get(mo))}</div>`;
+    }
+    html += `<p class="muted small">Photos never leave this phone. Once a finished month is downloaded, its full-size photos are erased ${ERASE_AFTER_DAYS} days later. Small thumbnails and all attendance marks are kept.</p>`;
+    v.innerHTML = html;
   }
 
   async function pendingArchiveMonths() {
@@ -743,17 +790,9 @@
     return out.sort();
   }
 
-  async function archiveHtml() {
-    const byMonth = new Map();
-    for (const r of state.checkins.values()) {
-      if (!byMonth.has(r.month)) byMonth.set(r.month, []);
-      byMonth.get(r.month).push(r);
-    }
-    if (!byMonth.size) return '<div class="empty">No photos yet. Your first check-in will appear here.</div>';
+  async function archiveRow(mo, list) {
     const cur = monthKey(todayKey());
-    const rows = [];
-    for (const mo of [...byMonth.keys()].sort().reverse()) {
-      const list = byMonth.get(mo);
+    {
       const full = list.filter((r) => r.hasFull);
       const bytes = full.reduce((s, r) => s + (r.fullBytes || 0), 0);
       const a = await DB.meta(`archive:${mo}`, {});
@@ -773,10 +812,9 @@
       } else {
         status = '<span style="color:var(--warn)">Not downloaded yet</span>';
       }
-      rows.push(`<div class="month-row"><div><b>${monthLabel(mo)}</b><div class="muted small">${list.length} photo${list.length === 1 ? '' : 's'}${full.length ? ` · ${fmtBytes(bytes)}` : ''}</div><div class="small" style="margin-top:4px">${status}</div></div>
-        <div class="acts">${acts}</div></div>`);
+      return `<div class="month-row"><div><b>Download ${monthLabel(mo)}</b><div class="muted small">${list.length} photo${list.length === 1 ? '' : 's'}${full.length ? ` · ${fmtBytes(bytes)}` : ''} + attendance sheet</div><div class="small" style="margin-top:4px">${status}</div></div>
+        <div class="acts">${acts}</div></div>`;
     }
-    return rows.join('');
   }
 
   async function downloadMonth(mo) {
@@ -793,11 +831,11 @@
     // attendance sheet for the month
     const [y, m] = mo.split('-').map(Number);
     const today = todayKey();
-    let csv = 'date,weekday,gym_day,status,check_in_time\n';
+    let csv = 'date,weekday,status,check_in_time\n';
     for (let i = 1; i <= new Date(y, m, 0).getDate(); i++) {
       const d = new Date(y, m - 1, i); const k = keyOf(d);
       const rec = state.checkins.get(k);
-      csv += `${k},${DOW[d.getDay()]},${isGymDay(d) ? 'yes' : 'no'},${dayStatus(k, today)},${rec ? fmtTime(rec.ts) : ''}\n`;
+      csv += `${k},${DOW[d.getDay()]},${dayStatus(k, today)},${rec ? fmtTime(rec.ts) : ''}\n`;
     }
     files.push({ name: `attendance-${mo}.csv`, data: csv, date: new Date() });
     const blob = await Zip.build(files);
@@ -836,32 +874,66 @@
     }
   }
 
-  async function openDay(k) {
+  function openDay(k) {
+    if (state.checkins.has(k)) { openPhoto(k); return; }
+    const s = dayStatus(k, todayKey());
+    const msg = { missed: 'Missed. No check-in that day.', due: 'Today. Check in with a gym photo.', future: 'Coming up.', none: 'Before tracking started.' }[s];
+    toast(`${fmtDay(parseKey(k))}: ${msg}`);
+  }
+
+  // Full-screen photo viewer, browsable date-wise (newest first)
+  const viewer = { list: [], i: 0, url: null };
+  async function showPhoto() {
+    const k = viewer.list[viewer.i];
     const rec = state.checkins.get(k);
-    const d = parseKey(k);
-    if (!rec) {
-      const s = dayStatus(k, todayKey());
-      const msg = { missed: 'Missed gym day. No check-in.', due: 'Gym day today. Check in with a photo.', upcoming: 'Upcoming gym day.', rest: 'Rest day.', none: 'Before tracking started.' }[s];
-      toast(`${fmtDay(d)}: ${msg}`);
-      return;
-    }
+    if (viewer.url) { URL.revokeObjectURL(viewer.url); viewer.url = null; }
     const full = rec.hasFull ? await DB.get('photos', k) : null;
-    const url = full ? URL.createObjectURL(full.blob) : thumbUrl(k);
-    const viewer = $('#viewer');
-    $('#viewer-img').src = url;
-    $('#viewer-cap').textContent = `${fmtDay(d)} · ${fmtTime(rec.ts)}${full ? '' : ' · thumbnail'}`;
-    $('#viewer-actions').innerHTML = `<button class="btn danger" data-action="delete-checkin" data-date="${k}">Delete check-in</button>`;
-    viewer.hidden = false;
-    viewer.dataset.url = full ? url : '';
-    pushOverlay(closeViewer);
+    if (full) viewer.url = URL.createObjectURL(full.blob);
+    $('#viewer-img').src = viewer.url || thumbUrl(k) || '';
+    const d = parseKey(k);
+    $('#viewer-cap').innerHTML = `<b>${DOW_LONG[d.getDay()]}, ${d.getDate()} ${MONTHS[d.getMonth()]} ${d.getFullYear()}</b><br>
+      <span class="small">Checked in ${fmtTime(rec.ts)} · ${viewer.i + 1} of ${viewer.list.length}${full ? '' : ' · thumbnail only'}</span>`;
+    $('#viewer-actions').innerHTML = `${full ? `<button class="btn light ghost" data-action="photo-save" data-date="${k}">${ICON.download}Save</button>` : ''}
+      <button class="btn danger" data-action="delete-checkin" data-date="${k}">Delete</button>`;
+    $('#viewer-prev').disabled = viewer.i >= viewer.list.length - 1;
+    $('#viewer-next').disabled = viewer.i <= 0;
+  }
+  async function openPhoto(k) {
+    viewer.list = [...state.checkins.keys()].sort().reverse();
+    viewer.i = Math.max(0, viewer.list.indexOf(k));
+    const el = $('#viewer');
+    if (el.hidden) {
+      el.hidden = false;
+      document.body.style.overflow = 'hidden';
+      pushOverlay(closeViewer);
+    }
+    await showPhoto();
+  }
+  function stepPhoto(dir) {
+    const n = viewer.i + dir; // +1 = older, -1 = newer
+    if (n < 0 || n >= viewer.list.length) return;
+    viewer.i = n;
+    showPhoto();
   }
   function closeViewer() {
-    const viewer = $('#viewer');
-    if (viewer.dataset.url) URL.revokeObjectURL(viewer.dataset.url);
-    viewer.hidden = true;
+    if (viewer.url) URL.revokeObjectURL(viewer.url);
+    viewer.url = null;
+    $('#viewer').hidden = true;
+    document.body.style.overflow = '';
+  }
+  async function savePhoto(k) {
+    const rec = state.checkins.get(k);
+    const full = await DB.get('photos', k);
+    if (!full) return;
+    const d = new Date(rec.ts);
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(full.blob);
+    a.download = `gym-checkin-${k}_${pad(d.getHours())}-${pad(d.getMinutes())}.jpg`;
+    document.body.appendChild(a); a.click();
+    setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 3000);
   }
   async function deleteCheckin(k) {
-    if (!confirm('Delete this check-in and its photo? The day will count as missed if it was a gym day.')) return;
+    if (!confirm('Delete this check-in and its photo? That day will show as missed.')) return;
     await DB.del('checkins', k);
     await DB.del('photos', k);
     state.checkins.delete(k);
@@ -961,7 +1033,7 @@
         <div class="field"><span>Program start (week 1)</span><input type="date" id="set-start" value="${state.settings.programStart}"></div>
         <div class="field"><span>Track attendance from</span><input type="date" id="set-track" value="${state.settings.trackStart}"></div>
         <div class="field"><span>This week</span><b>${week > 0 ? `Week ${week} · ${phaseOf(week).label}` : 'Not started'}</b></div>
-        <div class="field"><span>Gym days</span><b>Mon · Tue · Thu · Fri</b></div>
+        <div class="field"><span>Routine order</span><b>Push → Pull → Legs → Upper</b></div>
       </div>
       <div class="section-h">Offline animations</div>
       <div class="card">
@@ -1070,7 +1142,12 @@
     switch (a) {
       case 'goto': go(t.dataset.tab); break;
       case 'checkin': openCamera(); break;
-      case 'session': state.session = t.dataset.s; render(); break;
+      case 'session': state.session = t.dataset.s; state.sessionPicked = true; render(); break;
+      case 'att-view': state.attView = t.dataset.view; window.scrollTo(0, 0); render(); break;
+      case 'photo': openPhoto(t.dataset.date); break;
+      case 'photo-save': savePhoto(t.dataset.date); break;
+      case 'viewer-prev': stepPhoto(1); break;
+      case 'viewer-next': stepPhoto(-1); break;
       case 'open-ex': {
         const S = P.sessions[state.session];
         const item = S.items.find((i) => i.n === t.dataset.slot);
@@ -1148,6 +1225,21 @@
     }
   });
 
+  // Swipe between photos in the viewer
+  let touchX = null;
+  $('#viewer').addEventListener('touchstart', (e) => { touchX = e.touches[0].clientX; }, { passive: true });
+  $('#viewer').addEventListener('touchend', (e) => {
+    if (touchX === null) return;
+    const dx = e.changedTouches[0].clientX - touchX;
+    touchX = null;
+    if (Math.abs(dx) > 50) stepPhoto(dx > 0 ? 1 : -1); // swipe right = older, left = newer
+  });
+  document.addEventListener('keydown', (e) => {
+    if ($('#viewer').hidden) return;
+    if (e.key === 'ArrowLeft') stepPhoto(1);
+    if (e.key === 'ArrowRight') stepPhoto(-1);
+  });
+
   window.addEventListener('beforeinstallprompt', (e) => {
     e.preventDefault();
     state.installPrompt = e;
@@ -1180,6 +1272,12 @@
     }
     const devNoSw = location.hostname === 'localhost' && !params.has('sw');
     if ('serviceWorker' in navigator && location.protocol !== 'file:' && !devNoSw) {
+      const hadController = !!navigator.serviceWorker.controller;
+      let reloading = false;
+      navigator.serviceWorker.addEventListener('controllerchange', () => {
+        // a new version was installed: reload once so the update shows immediately
+        if (hadController && !reloading && $('#camera').hidden) { reloading = true; location.reload(); }
+      });
       navigator.serviceWorker.register('./sw.js').catch(() => {});
     }
   }

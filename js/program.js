@@ -2,13 +2,12 @@
    Exercise IDs refer to github.com/hasaneyldrm/exercises-dataset. */
 window.PROGRAM = {
   defaultStart: '2026-09-28',
-  gymDays: [1, 2, 4, 5], // Mon, Tue, Thu, Fri (Date.getDay)
-  schedule: { 1: 'push', 2: 'pull', 4: 'legs', 5: 'upper' },
+  // No fixed weekdays: sessions rotate in this order, based on the last workout logged.
   order: ['push', 'pull', 'legs', 'upper'],
 
   sessions: {
     push: {
-      name: 'Push', day: 'Monday', focus: 'Chest, shoulders, triceps, abs', duration: '~60 min',
+      name: 'Push', focus: 'Chest, shoulders, triceps, abs', duration: '~60 min',
       items: [
         { n: '1', id: '0025', sets: 3, reps: [6, 8], rest: 180, rir: '2–3', inc: 'barbell', swap: ['0289'], main: true },
         { n: '2', id: '0314', sets: 3, reps: [8, 12], rest: 120, rir: '1–2', inc: 'dumbbell', swap: ['0757'] },
@@ -20,7 +19,7 @@ window.PROGRAM = {
       ]
     },
     pull: {
-      name: 'Pull', day: 'Tuesday', focus: 'Back, rear delts, biceps, abs', duration: '~65 min',
+      name: 'Pull', focus: 'Back, rear delts, biceps, abs', duration: '~65 min',
       items: [
         { n: '1', id: '0652', sets: 3, reps: [6, 10], rest: 150, rir: '1–2', inc: 'bodyweight', swap: ['0017', '0818'], main: true },
         { n: '2', id: '0027', sets: 3, reps: [8, 10], rest: 150, rir: '2', inc: 'barbell', swap: ['1350'] },
@@ -32,7 +31,7 @@ window.PROGRAM = {
       ]
     },
     legs: {
-      name: 'Legs', day: 'Thursday', focus: 'Quads, hamstrings, glutes, calves', duration: '~70 min',
+      name: 'Legs', focus: 'Quads, hamstrings, glutes, calves', duration: '~70 min',
       items: [
         { n: '1', id: '0043', sets: 3, reps: [6, 8], rest: 180, rir: '2–3', inc: 'squat', swap: ['0743'], main: true },
         { n: '2', id: '1463', sets: 3, reps: [10, 12], rest: 120, rir: '1–2', inc: 'legpress', swap: ['3281'] },
@@ -44,7 +43,7 @@ window.PROGRAM = {
       ]
     },
     upper: {
-      name: 'Upper', day: 'Friday', focus: 'Shoulders, chest, back, arms', duration: '~65 min',
+      name: 'Upper', focus: 'Shoulders, chest, back, arms', duration: '~65 min',
       items: [
         { n: '1', id: '1456', sets: 3, reps: [6, 8], rest: 180, rir: '2–3', inc: 'ohp', swap: ['0405'], main: true },
         { n: '2', id: '0289', sets: 3, reps: [8, 12], rest: 120, rir: '1–2', inc: 'dumbbell', swap: ['0577'] },

@@ -193,20 +193,17 @@ body.sheet-open .timer { bottom: calc(var(--safe-b) + 12px); }
 .stat span { font-size: 11.5px; color: var(--muted); }
 .cal-week, .cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px; }
 .cal-week div { text-align: center; font-size: 11px; font-weight: 700; color: var(--muted); padding-bottom: 4px; }
-.cal-week .gym { color: var(--text); }
 .cell { position: relative; aspect-ratio: 1; border-radius: 11px; border: 1px solid transparent; background: var(--surface); display: grid; place-items: center; padding: 0; }
 .cell .n { position: absolute; top: 4px; left: 6px; font-size: 11px; font-weight: 600; color: var(--muted); }
 .cell svg.mark { position: absolute; width: 54%; height: 54%; left: 23%; top: 32%; stroke-width: 3; }
 .cell.blank { background: transparent; }
-.cell.rest { background: transparent; border-color: var(--line); }
-.cell.rest .n { color: var(--faint); }
 .cell.none { background: transparent; opacity: 0.35; }
-.cell.upcoming { border: 1px dashed #3d3d44; }
+.cell.future { background: transparent; border-color: var(--line); }
+.cell.future .n { color: var(--faint); }
 .cell.due { border: 2px solid var(--text); animation: due-pulse 1.8s ease-in-out infinite; }
 .cell.done { background: var(--ok-dim); border-color: rgba(61, 220, 132, 0.5); }
-.cell.done .n, .cell.bonus .n { color: var(--ok); }
-.cell.done svg.mark, .cell.bonus svg.mark { stroke: var(--ok); }
-.cell.bonus { border: 1px solid rgba(61, 220, 132, 0.5); background: transparent; }
+.cell.done .n { color: var(--ok); }
+.cell.done svg.mark { stroke: var(--ok); }
 .cell.missed { background: var(--bad-dim); border-color: rgba(255, 93, 93, 0.35); }
 .cell.missed .n { color: var(--bad); }
 .cell.missed svg.mark { stroke: var(--bad); }
@@ -223,8 +220,7 @@ body.sheet-open .timer { bottom: calc(var(--safe-b) + 12px); }
 .legend i { display: inline-block; width: 12px; height: 12px; border-radius: 4px; vertical-align: -2px; margin-right: 5px; }
 .legend .l-done { background: var(--ok-dim); border: 1px solid var(--ok); }
 .legend .l-missed { background: var(--bad-dim); border: 1px solid var(--bad); }
-.legend .l-up { border: 1px dashed #55555c; }
-.legend .l-rest { border: 1px solid var(--line); }
+.legend .l-today { border: 2px solid var(--text); }
 
 .banner { border-radius: 12px; padding: 12px; margin-bottom: 12px; background: var(--ok-dim); border: 1px solid rgba(61, 220, 132, 0.4); animation: pop-in 0.35s ease; }
 .banner.warn { background: rgba(245, 185, 66, 0.1); border-color: rgba(245, 185, 66, 0.4); }
@@ -283,3 +279,26 @@ body.sheet-open .timer { bottom: calc(var(--safe-b) + 12px); }
 @media (min-width: 700px) {
   .view { padding-top: 22px; }
 }
+
+/* ---------- routine reminder, photos ---------- */
+.reminder { border-color: #3a3a41; }
+.reminder-title { font-size: 22px; font-weight: 800; letter-spacing: -0.01em; margin: 2px 0 4px; }
+.reminder-title .muted { font-size: 14px; font-weight: 500; }
+.seg.two { grid-template-columns: 1fr 1fr; margin-top: 0; }
+.photo-btn { padding: 0; border: 0; background: none; border-radius: 10px; flex: none; }
+.photo-btn img { width: 52px; height: 52px; border-radius: 10px; object-fit: cover; display: block; }
+.link { background: none; border: 0; padding: 0; color: var(--text); text-decoration: underline; font-weight: 600; }
+.month-head { display: flex; justify-content: space-between; align-items: center; margin: 18px 2px 8px; }
+.photo-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+.ph { position: relative; padding: 0; border: 1px solid var(--line); border-radius: 12px; overflow: hidden; aspect-ratio: 3 / 4; background: var(--surface); }
+.ph img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.ph-none { position: absolute; inset: 0; display: grid; place-items: center; font-size: 12px; color: var(--muted); }
+.ph-cap { position: absolute; left: 0; right: 0; bottom: 0; padding: 18px 6px 5px; font-size: 10.5px; color: #fff; text-align: left; line-height: 1.25; background: linear-gradient(transparent, rgba(0, 0, 0, 0.8)); }
+.ph-cap b { font-size: 12.5px; }
+.archive-card { margin-top: 8px; padding-top: 4px; padding-bottom: 4px; }
+.viewer-nav { position: absolute; top: 50%; transform: translateY(-50%); z-index: 2; }
+.viewer-nav.prev { left: 10px; }
+.viewer-nav.next { right: 10px; }
+.viewer-nav:disabled { opacity: 0.2; }
+.viewer-cap { line-height: 1.35; }
+.viewer { touch-action: pan-y; }
