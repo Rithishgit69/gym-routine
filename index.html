@@ -83,8 +83,9 @@
     <div class="cam-controls" id="cam-live">
       <span class="cam-spacer"></span>
       <button class="shutter" data-action="cam-shoot" aria-label="Take photo"></button>
-      <button class="icon-btn light" data-action="cam-flip" aria-label="Switch camera">
-        <svg viewBox="0 0 24 24"><path d="M4 8h3l2-3h6l2 3h3v11H4z"/><path d="M9 13a3 3 0 0 1 5.2-2M15 13a3 3 0 0 1-5.2 2M14.5 9v2h-2M9.5 17v-2h2"/></svg>
+      <button class="flip-btn" data-action="cam-flip" aria-label="Switch between front and back camera">
+        <span class="icon-btn light"><svg viewBox="0 0 24 24"><path d="M4 8h3l2-3h6l2 3h3v11H4z"/><path d="M9 13a3 3 0 0 1 5.2-2M15 13a3 3 0 0 1-5.2 2M14.5 9v2h-2M9.5 17v-2h2"/></svg></span>
+        <span class="flip-label" id="cam-flip-label">Back</span>
       </button>
     </div>
     <div class="cam-controls" id="cam-confirm" hidden>

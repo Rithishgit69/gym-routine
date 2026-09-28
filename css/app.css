@@ -414,3 +414,9 @@ body.sheet-open .timer { bottom: calc(var(--safe-b) + 12px); }
 .asheet-sub { color: var(--muted); font-size: 13.5px; margin: 6px 0 16px; }
 .asheet-actions { display: grid; gap: 8px; }
 @keyframes fade-in { from { opacity: 0; } to { opacity: 1; } }
+
+/* camera flip button with label */
+.flip-btn { background: none; border: 0; padding: 0; display: flex; flex-direction: column; align-items: center; gap: 4px; color: #fff; }
+.flip-btn .icon-btn { width: 52px; height: 52px; }
+.flip-label { font-family: var(--display); font-weight: 700; font-size: 13px; text-transform: uppercase; letter-spacing: 0.08em; }
+.cam-spacer { width: 52px; }

@@ -865,7 +865,8 @@
   }
 
   // ---------------------------------------------------------------- camera check-in
-  const cam = { stream: null, facing: 'user', full: null, thumb: null, previewUrl: null };
+  const savedFacing = (() => { try { return localStorage.getItem('camFacing'); } catch (_) { return null; } })();
+  const cam = { stream: null, facing: savedFacing === 'environment' ? 'environment' : 'user', actual: null, full: null, thumb: null, previewUrl: null, req: 0 };
 
   async function openCamera() {
     const existing = state.checkins.get(todayKey());
@@ -882,30 +883,75 @@
     m.hidden = !msg;
     m.textContent = msg || '';
   }
+  const pause = (ms) => new Promise((r) => setTimeout(r, ms));
+
+  // Ask for a specific camera. Many Android phones ignore a plain facingMode hint,
+  // so try an exact facingMode first, then pick the camera by its label, then fall back.
+  async function openFacing(facing) {
+    const md = navigator.mediaDevices;
+    const base = { width: { ideal: 1920 }, height: { ideal: 1920 } };
+    const tryGet = async (video) => md.getUserMedia({ video: { ...base, ...video }, audio: false });
+    try {
+      return await tryGet({ facingMode: { exact: facing } });
+    } catch (e) {
+      if (e && e.name === 'NotAllowedError') throw e;
+    }
+    try {
+      const cams = (await md.enumerateDevices()).filter((d) => d.kind === 'videoinput');
+      const want = facing === 'environment' ? /back|rear|environment|world|main/i : /front|user|face|selfie/i;
+      let dev = cams.find((d) => want.test(d.label));
+      if (!dev && cams.length > 1) dev = facing === 'environment' ? cams[cams.length - 1] : cams[0];
+      if (dev) return await tryGet({ deviceId: { exact: dev.deviceId } });
+    } catch (e) {
+      if (e && e.name === 'NotAllowedError') throw e;
+    }
+    return tryGet({ facingMode: facing });
+  }
+
   async function startStream() {
+    const req = ++cam.req;
     stopStream();
     camMessage('');
+    updateFlipLabel();
     if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
       camMessage('Camera not available. Open the app over HTTPS (the installed app or your GitHub Pages link).');
       return;
     }
+    await pause(150); // let the previous camera release (needed on some phones)
     try {
-      cam.stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: cam.facing, width: { ideal: 1920 }, height: { ideal: 1920 } }, audio: false
-      });
+      const stream = await openFacing(cam.facing);
+      if (req !== cam.req) { stream.getTracks().forEach((t) => t.stop()); return; } // a newer request won
+      cam.stream = stream;
+      const settings = stream.getVideoTracks()[0].getSettings ? stream.getVideoTracks()[0].getSettings() : {};
+      cam.actual = settings.facingMode || cam.facing;
       const v = $('#cam-video');
-      v.srcObject = cam.stream;
-      v.classList.toggle('mirror', cam.facing === 'user');
+      v.srcObject = stream;
+      v.classList.toggle('mirror', cam.actual === 'user');
       await v.play().catch(() => {});
+      if (settings.facingMode && settings.facingMode !== cam.facing) {
+        toast(cam.facing === 'environment' ? 'This phone only allowed the front camera' : 'This phone only allowed the back camera');
+      }
     } catch (e) {
+      if (req !== cam.req) return;
       camMessage(e && e.name === 'NotAllowedError'
         ? 'Camera permission is blocked. Allow the camera for this app in Chrome site settings, then try again.'
         : 'Could not start the camera. Close other apps using it and try again.');
     }
   }
+  function flipCamera() {
+    cam.facing = cam.facing === 'user' ? 'environment' : 'user';
+    try { localStorage.setItem('camFacing', cam.facing); } catch (_) { /* private mode */ }
+    startStream();
+  }
+  function updateFlipLabel() {
+    const l = $('#cam-flip-label');
+    if (l) l.textContent = cam.facing === 'user' ? 'Back' : 'Front';
+  }
   function stopStream() {
     if (cam.stream) cam.stream.getTracks().forEach((t) => t.stop());
     cam.stream = null;
+    const v = $('#cam-video');
+    if (v) v.srcObject = null;
   }
   function showLive() {
     $('#cam-video').hidden = false;
@@ -953,7 +999,7 @@
     const c = document.createElement('canvas');
     c.width = w; c.height = h;
     const ctx = c.getContext('2d');
-    if (cam.facing === 'user') { ctx.translate(w, 0); ctx.scale(-1, 1); }
+    if ((cam.actual || cam.facing) === 'user') { ctx.translate(w, 0); ctx.scale(-1, 1); }
     ctx.drawImage(v, 0, 0, w, h);
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     drawStamp(ctx, w, h, when);
@@ -1616,7 +1662,7 @@
       case 'timer-add': timer.end += 30000; timer.total += 30000; timer.fired = false; $('#timer').classList.remove('over'); tick(); break;
       case 'timer-skip': $('#timer').hidden = true; clearTimeout(timer.raf); break;
       case 'cam-close': closeTop(); break;
-      case 'cam-flip': cam.facing = cam.facing === 'user' ? 'environment' : 'user'; startStream(); break;
+      case 'cam-flip': flipCamera(); break;
       case 'cam-shoot': shoot(); break;
       case 'cam-retake': showLive(); startStream(); break;
       case 'cam-use': t.disabled = true; await useCheckin(); t.disabled = false; break;
