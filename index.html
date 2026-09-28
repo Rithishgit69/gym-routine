@@ -1,0 +1,113 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="description" content="Gym routine guide with exercise animations, set logging and photo-verified attendance.">
+  <meta name="theme-color" content="#0d0d0e">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <title>Gym Routine</title>
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icons/favicon-32.png" sizes="32x32" type="image/png">
+  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+  <link rel="stylesheet" href="css/app.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="topbar-inner">
+      <div>
+        <div class="topbar-title" id="title">Gym Routine</div>
+        <div class="topbar-sub" id="subtitle"></div>
+      </div>
+      <button class="icon-btn" id="top-checkin" aria-label="Check in">
+        <svg viewBox="0 0 24 24"><path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg>
+      </button>
+    </div>
+  </header>
+
+  <main id="view" class="view" tabindex="-1"></main>
+
+  <div id="timer" class="timer" hidden>
+    <div class="timer-bar"><span id="timer-fill"></span></div>
+    <div class="timer-row">
+      <div>
+        <div class="timer-label" id="timer-label">Rest</div>
+        <div class="timer-time" id="timer-time">0:00</div>
+      </div>
+      <div class="timer-actions">
+        <button class="btn small ghost" data-action="timer-add">+30 s</button>
+        <button class="btn small" data-action="timer-skip">Skip</button>
+      </div>
+    </div>
+  </div>
+
+  <nav class="tabbar" aria-label="Main">
+    <button class="tab" data-tab="today" aria-label="Workout">
+      <svg viewBox="0 0 24 24"><path d="M3 10v4M6 7v10M18 7v10M21 10v4M6 12h12"/></svg><span>Workout</span>
+    </button>
+    <button class="tab" data-tab="calendar" aria-label="Attendance">
+      <svg viewBox="0 0 24 24"><rect x="3.5" y="5" width="17" height="15" rx="2"/><path d="M3.5 10h17M8 3v4M16 3v4M9 15l2 2 4-4"/></svg><span>Attendance</span>
+    </button>
+    <button class="tab" data-tab="progress" aria-label="Progress">
+      <svg viewBox="0 0 24 24"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg><span>Progress</span>
+    </button>
+    <button class="tab" data-tab="settings" aria-label="Settings">
+      <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M4.2 4.2l2.1 2.1M17.7 17.7l2.1 2.1M2 12h3M19 12h3M4.2 19.8l2.1-2.1M17.7 6.3l2.1-2.1"/></svg><span>Settings</span>
+    </button>
+  </nav>
+
+  <section id="sheet" class="sheet" aria-modal="true" role="dialog" hidden>
+    <div class="sheet-head">
+      <button class="icon-btn" data-action="sheet-close" aria-label="Close">
+        <svg viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></svg>
+      </button>
+      <div class="sheet-title" id="sheet-title"></div>
+    </div>
+    <div class="sheet-body" id="sheet-body"></div>
+  </section>
+
+  <section id="camera" class="camera" aria-modal="true" role="dialog" hidden>
+    <video id="cam-video" playsinline autoplay muted></video>
+    <img id="cam-preview" alt="Check-in photo preview" hidden>
+    <div class="cam-top">
+      <button class="icon-btn light" data-action="cam-close" aria-label="Close camera">
+        <svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg>
+      </button>
+      <div class="cam-hint" id="cam-hint">Take a photo of yourself in the gym</div>
+    </div>
+    <div class="cam-msg" id="cam-msg" hidden></div>
+    <div class="cam-controls" id="cam-live">
+      <span class="cam-spacer"></span>
+      <button class="shutter" data-action="cam-shoot" aria-label="Take photo"></button>
+      <button class="icon-btn light" data-action="cam-flip" aria-label="Switch camera">
+        <svg viewBox="0 0 24 24"><path d="M4 8h3l2-3h6l2 3h3v11H4z"/><path d="M9 13a3 3 0 0 1 5.2-2M15 13a3 3 0 0 1-5.2 2M14.5 9v2h-2M9.5 17v-2h2"/></svg>
+      </button>
+    </div>
+    <div class="cam-controls" id="cam-confirm" hidden>
+      <button class="btn ghost light" data-action="cam-retake">Retake</button>
+      <button class="btn primary" data-action="cam-use">Use photo &amp; check in</button>
+    </div>
+  </section>
+
+  <section id="viewer" class="viewer" aria-modal="true" role="dialog" hidden>
+    <div class="viewer-top">
+      <button class="icon-btn light" data-action="viewer-close" aria-label="Close">
+        <svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg>
+      </button>
+      <div class="viewer-cap" id="viewer-cap"></div>
+    </div>
+    <img id="viewer-img" alt="Check-in photo">
+    <div class="viewer-actions" id="viewer-actions"></div>
+  </section>
+
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+
+  <script src="js/exercises.js"></script>
+  <script src="js/program.js"></script>
+  <script src="js/db.js"></script>
+  <script src="js/zip.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>
