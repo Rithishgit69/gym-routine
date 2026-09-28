@@ -22,6 +22,7 @@ Works offline once installed. No backend. All data (including photos) stays on t
 **Photo-verified attendance**
 - Check-in any day, only via the **live in-app camera**. No gallery uploads. Each photo is stamped with date and time.
 - Animated calendar: boxes cascade in, today's box gets stamped ✓; every past day without a check-in gets ✕
+- **Rest days**: mark today (Home) or any day (tap it in the calendar, including past or future days) as a rest day; rest days show a moon, aren't counted as absent and don't break streaks
 - Day streaks and monthly attendance %
 - Photo gallery grouped by month (newest first); full-screen viewer with swipe/arrows between days, save or delete
 - Monthly photo archive: download a month as a ZIP (photos + `attendance-YYYY-MM.csv`). Full-size photos of a finished month are erased 7 days after download; thumbnails and attendance are kept.

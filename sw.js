@@ -1,5 +1,5 @@
 /* Service worker: offline app shell + offline copy of exercise photos and animations. */
-const VERSION = 'v2.0.0';
+const VERSION = 'v2.1.0';
 const SHELL_CACHE = `shell-${VERSION}`;
 const MEDIA_CACHE = 'media-v1';
 const SHELL = [

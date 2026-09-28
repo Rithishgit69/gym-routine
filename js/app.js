@@ -76,7 +76,9 @@
     check: '<svg viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>',
     download: '<svg viewBox="0 0 24 24"><path d="M12 4v11M7 10l5 5 5-5M5 20h14"/></svg>',
     swap: '<svg viewBox="0 0 24 24"><path d="M7 7h11l-3-3M17 17H6l3 3"/></svg>',
-    film: '<svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M10 9.5v5l4.5-2.5z"/></svg>'
+    film: '<svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M10 9.5v5l4.5-2.5z"/></svg>',
+    moon: '<svg viewBox="0 0 24 24"><path d="M20 14.5A8 8 0 1 1 9.5 4a6.5 6.5 0 0 0 10.5 10.5z"/></svg>',
+    moonMark: '<svg class="mark rest-mark" viewBox="0 0 24 24"><path d="M18 14.2A6.4 6.4 0 1 1 9.8 6a5.2 5.2 0 0 0 8.2 8.2z"/></svg>'
   };
 
   let toastTimer;
@@ -106,7 +108,8 @@
     sheetStudio: null,
     studioTpl: null,
     studioSong: null,
-    autoEditMonth: null
+    autoEditMonth: null,
+    restDays: new Set()
   };
 
   function thumbUrl(date) {
@@ -160,10 +163,21 @@
       trainingToday: todays.length > 0,
       next,
       last: last ? { session: last.session, date: last.date } : null,
-      daysSinceCheckin: lastCheckin ? daysBetween(lastCheckin, today) : null
+      daysSinceCheckin: lastCheckin ? activeDaysBetween(lastCheckin, today) : null
     };
   }
   const ago = (n) => (n === 0 ? 'today' : n === 1 ? 'yesterday' : `${n} days ago`);
+  // days between two dates, not counting rest days
+  function activeDaysBetween(a, b) {
+    let n = 0;
+    for (let d = addDays(parseKey(a), 1); keyOf(d) <= b; d = addDays(d, 1)) if (!state.restDays.has(keyOf(d))) n++;
+    return n;
+  }
+  const isRest = (k) => state.restDays.has(k) && !state.checkins.has(k);
+  async function setRest(k, on) {
+    if (on) state.restDays.add(k); else state.restDays.delete(k);
+    await DB.setMeta('restDays', [...state.restDays].sort());
+  }
   const slotOf = (sessionKey, item) => `${sessionKey}:${item.n}`;
 
   // ---------------------------------------------------------------- logs
@@ -275,14 +289,21 @@
     }
     const pct = totalSets ? Math.round((setsDone / totalSets) * 100) : 0;
 
-    const gap = !ci && rt.daysSinceCheckin !== null && rt.daysSinceCheckin >= 2
+    const gap = !ci && !isRest(todayKey()) && rt.daysSinceCheckin !== null && rt.daysSinceCheckin >= 2
       ? `<div class="warn-line">No check-in for ${rt.daysSinceCheckin} days. Your routine is waiting.</div>` : '';
+    const restToday = isRest(todayKey());
     const checkin = ci
       ? `<div class="checked-row">
           ${thumbUrl(todayKey()) ? `<button class="photo-btn" data-action="photo" data-date="${todayKey()}" aria-label="View today's photo"><img src="${thumbUrl(todayKey())}" alt=""></button>` : ''}
           <div class="grow"><b>Checked in</b><div class="muted small">${fmtTime(ci.ts)} · attendance marked</div></div>
           <button class="btn small ghost" data-action="goto" data-tab="calendar">Calendar</button></div>`
-      : `<button class="btn primary block" data-action="checkin">${ICON.camera}Check in with a gym photo</button>`;
+      : restToday
+        ? `<div class="rest-row"><span class="rest-ic">${ICON.moon}</span>
+            <div class="grow"><b>Rest day</b><div class="muted small">Doesn't count as absent. Sleep 8 h, eat your 2,750 kcal, walk 6–8k steps.</div></div></div>
+          <div class="row" style="margin-top:10px;gap:8px"><button class="btn small ghost" data-action="rest-off" data-date="${todayKey()}">Undo rest day</button>
+            <button class="btn small" style="flex:1" data-action="checkin">${ICON.camera}Train anyway</button></div>`
+        : `<div class="row" style="gap:8px"><button class="btn primary" style="flex:1" data-action="checkin">${ICON.camera}Check in</button>
+            <button class="btn ghost" data-action="rest-on" data-date="${todayKey()}">${ICON.moon}Rest day</button></div>`;
 
     const hero = `<section class="hero">
         <div class="hero-top"><span class="eyebrow">${isRoutine ? 'Today’s routine' : 'Preview'}</span>
@@ -364,7 +385,7 @@
     for (let d = 1; d <= days; d++) {
       const k = keyOf(new Date(y, m - 1, d));
       status[d] = dayStatus(k, today);
-      if (state.checkins.has(k)) { run++; best = Math.max(best, run); } else if (k <= today) run = 0;
+      if (state.checkins.has(k)) { run++; best = Math.max(best, run); } else if (k <= today && !state.restDays.has(k)) run = 0;
     }
     return { sessions: monthCheckins(mo).length, pct: st.due ? Math.round((st.done / st.due) * 100) : 100, best, status };
   }
@@ -969,6 +990,7 @@
     await DB.put('checkins', rec);
     dropThumbUrl(date);
     state.checkins.set(date, rec);
+    if (state.restDays.has(date)) await setRest(date, false);
     if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(() => {});
     closeTop(); // closes the camera
     state.attView = 'calendar';
@@ -982,6 +1004,7 @@
   // Every day counts: checked in = done, past day without a check-in = missed.
   function dayStatus(k, today) {
     if (state.checkins.has(k)) return 'done';
+    if (state.restDays.has(k)) return 'rest';
     if (k > today) return 'future';
     if (k === today) return 'due';
     if (k < state.settings.trackStart) return 'none';
@@ -994,23 +1017,24 @@
     let best = 0; let run = 0;
     for (let d = new Date(start); keyOf(d) <= today; d = addDays(d, 1)) {
       const k = keyOf(d);
-      if (state.checkins.has(k)) { run++; best = Math.max(best, run); } else if (k !== today) run = 0;
+      if (state.checkins.has(k)) { run++; best = Math.max(best, run); } else if (k !== today && !state.restDays.has(k)) run = 0;
     }
     return { current: run, best };
   }
 
   function monthStats(y, m) {
     const today = todayKey();
-    let due = 0; let done = 0;
+    let due = 0; let done = 0; let rest = 0;
     const days = new Date(y, m + 1, 0).getDate();
     for (let i = 1; i <= days; i++) {
       const k = keyOf(new Date(y, m, i));
       if (k > today || k < state.settings.trackStart) continue;
+      if (isRest(k)) { rest++; continue; }
       if (k === today && !state.checkins.has(k)) continue;
       due++;
       if (state.checkins.has(k)) done++;
     }
-    return { due, done };
+    return { due, done, rest };
   }
 
   // ---------------------------------------------------------------- render: calendar
@@ -1034,7 +1058,7 @@
     for (let i = 1; i <= days; i++) {
       const d = new Date(y, m, i); const k = keyOf(d);
       const s = dayStatus(k, today);
-      const mark = s === 'done' ? ICON.tick : s === 'missed' ? ICON.cross : '';
+      const mark = s === 'done' ? ICON.tick : s === 'missed' ? ICON.cross : s === 'rest' ? ICON.moonMark : '';
       const stamp = anim === k ? ' stamp' : '';
       const extra = anim === k ? `;--stamp-delay:${idx * 22 + 450}ms` : '';
       cells += `<button class="cell ${s}${k === today ? ' today' : ''}${stamp}" style="--i:${idx++}${extra}" data-action="day" data-date="${k}" aria-label="${fmtDay(d)}: ${s}">
@@ -1069,8 +1093,8 @@
         </div>
         <div class="cal-week">${['M', 'T', 'W', 'T', 'F', 'S', 'S'].map((c) => `<div>${c}</div>`).join('')}</div>
         <div class="cal-grid ${anim ? 'cascade' : ''}" id="cal-grid">${cells}</div>
-        <div class="legend"><span><i class="l-done"></i>Checked in</span><span><i class="l-missed"></i>Missed</span><span><i class="l-today"></i>Today</span></div>
-        <div class="muted small">Tap a ticked day to see that day's photo.</div>
+        <div class="legend"><span><i class="l-done"></i>Checked in</span><span><i class="l-rest"></i>Rest</span><span><i class="l-missed"></i>Missed</span><span><i class="l-today"></i>Today</span></div>
+        <div class="muted small">${st.rest ? `${st.rest} rest day${st.rest === 1 ? '' : 's'} this month (not counted as absent). ` : ''}Tap any day to see its photo or mark it as a rest day.</div>
       </div>
       <button class="btn block" data-action="att-view" data-view="photos">View all photos (${state.checkins.size})</button>`;
 
@@ -1219,10 +1243,37 @@
 
   function openDay(k) {
     if (state.checkins.has(k)) { openPhoto(k); return; }
-    const s = dayStatus(k, todayKey());
-    const msg = { missed: 'Missed. No check-in that day.', due: 'Today. Check in with a gym photo.', future: 'Coming up.', none: 'Before tracking started.' }[s];
-    toast(`${fmtDay(parseKey(k))}: ${msg}`);
+    const today = todayKey();
+    const s = dayStatus(k, today);
+    const title = `${DOW_LONG[parseKey(k).getDay()]}, ${parseKey(k).getDate()} ${MONTHS[parseKey(k).getMonth()]}`;
+    if (s === 'none') { toast(`${fmtDay(parseKey(k))}: before tracking started`); return; }
+    const acts = [];
+    if (s === 'rest') {
+      if (k === today) acts.push({ label: 'Train anyway: check in', action: 'checkin', cls: 'primary' });
+      acts.push({ label: 'Remove rest day', action: 'rest-off', date: k, cls: '' });
+    } else {
+      if (k === today) acts.push({ label: 'Check in with a gym photo', action: 'checkin', cls: 'primary' });
+      acts.push({ label: 'Mark as rest day', action: 'rest-on', date: k, cls: k === today ? '' : 'primary' });
+    }
+    const sub = {
+      rest: 'Rest day. Not counted as absent and doesn\u2019t break your streak.',
+      missed: 'No check-in. If this was a planned rest day, mark it so it doesn\u2019t count as absent.',
+      due: 'Not checked in yet.',
+      future: 'Plan ahead: mark it as a rest day now.'
+    }[s];
+    openActionSheet(title, sub, acts);
   }
+
+  function openActionSheet(title, sub, actions) {
+    const el = $('#asheet');
+    $('#asheet-title').textContent = title;
+    $('#asheet-sub').textContent = sub || '';
+    $('#asheet-actions').innerHTML = actions.map((a) => `<button class="btn block ${a.cls || ''}" data-action="${a.action}" ${a.date ? `data-date="${a.date}"` : ''} data-asheet="1">${a.action.startsWith('rest') ? ICON.moon : a.action === 'checkin' ? ICON.camera : ''}${esc(a.label)}</button>`).join('')
+      + '<button class="btn block ghost" data-action="asheet-close">Cancel</button>';
+    el.hidden = false;
+    pushOverlay(closeActionSheet);
+  }
+  function closeActionSheet() { $('#asheet').hidden = true; }
 
   // Full-screen photo viewer, browsable date-wise (newest first)
   const viewer = { list: [], i: 0, url: null };
@@ -1448,6 +1499,7 @@
       app: 'gym-routine', version: 1, exportedAt: new Date().toISOString(),
       settings: state.settings,
       checkins: [...state.checkins.values()].map(({ thumb, ...r }) => r),
+      restDays: [...state.restDays],
       logs: await DB.all('logs')
     };
     const blob = new Blob([JSON.stringify(data, null, 1)], { type: 'application/json' });
@@ -1471,6 +1523,7 @@
         }
       }
       if (data.settings) { state.settings = { ...state.settings, ...data.settings }; await DB.setMeta('settings', state.settings); }
+      if (Array.isArray(data.restDays)) { data.restDays.forEach((k) => state.restDays.add(k)); await DB.setMeta('restDays', [...state.restDays].sort()); }
       toast(`Imported ${data.logs?.length || 0} logs and ${data.checkins?.length || 0} check-ins`);
       render();
     } catch (e) {
@@ -1486,7 +1539,7 @@
     const a = t.dataset.action;
     switch (a) {
       case 'goto': go(t.dataset.tab); break;
-      case 'checkin': openCamera(); break;
+      case 'checkin': if (t.dataset.asheet) closeTop(); setTimeout(openCamera, t.dataset.asheet ? 120 : 0); break;
       case 'session': state.session = t.dataset.s; state.sessionPicked = true; render(); break;
       case 'media-mode': {
         setMediaMode(t.dataset.mode);
@@ -1516,6 +1569,24 @@
         break;
       case 'att-view': state.attView = t.dataset.view; window.scrollTo(0, 0); render(); break;
       case 'photo': openPhoto(t.dataset.date); break;
+      case 'asheet-close': closeTop(); break;
+      case 'rest-on': {
+        const k = t.dataset.date;
+        if (t.dataset.asheet) closeTop();
+        await setRest(k, true);
+        vibrate(20);
+        toast(`${fmtDay(parseKey(k))} marked as a rest day`);
+        render();
+        break;
+      }
+      case 'rest-off': {
+        const k = t.dataset.date;
+        if (t.dataset.asheet) closeTop();
+        await setRest(k, false);
+        toast('Rest day removed');
+        render();
+        break;
+      }
       case 'photo-save': savePhoto(t.dataset.date); break;
       case 'viewer-prev': stepPhoto(1); break;
       case 'viewer-next': stepPhoto(-1); break;
@@ -1641,6 +1712,7 @@
     }
     state.settings = s;
     for (const r of await DB.all('checkins')) state.checkins.set(r.date, r);
+    (await DB.meta('restDays', [])).forEach((k) => state.restDays.add(k));
     await autoCleanup();
     await render();
     const params = new URLSearchParams(location.search);

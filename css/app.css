@@ -268,6 +268,9 @@ body.sheet-open .timer { bottom: calc(var(--safe-b) + 12px); }
 .cell.missed .n { color: var(--bad); }
 .cell.missed svg.mark { stroke: var(--bad); }
 .cell.today .n { font-weight: 800; }
+.cell.rest { background: rgba(255, 255, 255, 0.05); border: 1px dashed #3d3d44; }
+.cell.rest .n { color: var(--muted); }
+.cell svg.rest-mark { stroke: #b9b9c2; fill: rgba(185, 185, 194, 0.15); stroke-width: 1.8; }
 
 .cal-grid.cascade .cell:not(.blank) { animation: cell-in 0.42s cubic-bezier(0.2, 0.9, 0.3, 1.2) both; animation-delay: calc(var(--i) * 22ms); }
 .cal-grid.cascade .cell.none { animation-name: cell-in-faint; }
@@ -281,6 +284,7 @@ body.sheet-open .timer { bottom: calc(var(--safe-b) + 12px); }
 .legend .l-done { background: var(--lime); }
 .legend .l-missed { background: var(--bad-dim); border: 1px solid var(--bad); }
 .legend .l-today { border: 2px solid var(--lime); }
+.legend .l-rest { background: rgba(255, 255, 255, 0.08); border: 1px dashed #55555c; }
 
 .banner { border-radius: 16px; padding: 12px 14px; margin-bottom: 12px; background: var(--lime-dim); border: 1px solid rgba(198, 255, 61, 0.4); animation: pop-in 0.35s ease; }
 .banner.warn { background: rgba(255, 176, 32, 0.08); border-color: rgba(255, 176, 32, 0.4); }
@@ -397,3 +401,16 @@ body.sheet-open .timer { bottom: calc(var(--safe-b) + 12px); }
 @media (min-width: 700px) {
   .view { padding-top: 16px; }
 }
+
+/* ---------- rest day + action sheet ---------- */
+.rest-row { display: flex; align-items: center; gap: 12px; padding: 10px 12px; border-radius: 16px; background: rgba(255, 255, 255, 0.05); border: 1px dashed #3d3d44; }
+.rest-row .grow { flex: 1; min-width: 0; }
+.rest-row b { font-family: var(--display); font-size: 20px; text-transform: uppercase; letter-spacing: 0.02em; }
+.rest-ic { width: 40px; height: 40px; border-radius: 50%; display: grid; place-items: center; background: var(--surface-3); color: #d6d6de; flex: none; }
+.asheet { position: fixed; inset: 0; z-index: 95; display: flex; align-items: flex-end; justify-content: center; }
+.asheet-backdrop { position: absolute; inset: 0; background: rgba(0, 0, 0, 0.6); animation: fade-in 0.2s ease; }
+.asheet-card { position: relative; width: 100%; max-width: 640px; background: var(--surface); border: 1px solid var(--line-2); border-bottom: 0; border-radius: 24px 24px 0 0; padding: 20px 16px calc(18px + var(--safe-b)); animation: slide-up 0.25s cubic-bezier(0.2, 0.8, 0.2, 1); }
+.asheet-title { font-family: var(--display); font-weight: 800; font-size: 26px; text-transform: uppercase; line-height: 1.05; }
+.asheet-sub { color: var(--muted); font-size: 13.5px; margin: 6px 0 16px; }
+.asheet-actions { display: grid; gap: 8px; }
+@keyframes fade-in { from { opacity: 0; } to { opacity: 1; } }
