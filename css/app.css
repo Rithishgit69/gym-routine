@@ -302,3 +302,4 @@ body.sheet-open .timer { bottom: calc(var(--safe-b) + 12px); }
 .viewer-nav:disabled { opacity: 0.2; }
 .viewer-cap { line-height: 1.35; }
 .viewer { touch-action: pan-y; }
+.mini-del { width: 28px; height: 28px; border-radius: 8px; border: 1px solid rgba(255, 93, 93, 0.35); background: transparent; color: var(--bad); font-size: 12px; line-height: 1; flex: none; }

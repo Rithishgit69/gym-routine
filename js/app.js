@@ -329,18 +329,20 @@
         const s = todaySets[i];
         const done = s && s.r > 0;
         const w = s ? s.w : (sug ? sug.w : '');
-        rows += `<div class="set ${done ? 'done' : ''}" data-i="${i}">
+        rows += `<div class="set ${done ? 'done' : ''}" data-i="${i}"${done ? ` data-w="${esc(s.w)}" data-r="${esc(s.r)}"` : ''}>
           <label>Set ${i + 1}</label>
           <div><input type="number" inputmode="decimal" step="0.5" min="0" placeholder="0" value="${w === 0 || w ? esc(w) : ''}" aria-label="Weight set ${i + 1}"><div class="unit">kg</div></div>
           <div><input type="number" inputmode="numeric" min="0" placeholder="${item.reps[0]}–${item.reps[1]}" value="${done ? esc(s.r) : ''}" aria-label="Reps set ${i + 1}"><div class="unit">reps</div></div>
-          <button class="tick" data-action="set-done" aria-label="Save set ${i + 1}">${ICON.check}</button></div>`;
+          <button class="tick" data-action="set-done" aria-label="${done ? 'Uncheck' : 'Save'} set ${i + 1}">${ICON.check}</button></div>`;
       }
       logger = `<div class="section-h">Log your sets</div>
         ${sug ? `<div class="hint ${sug.up ? 'up' : ''}">${esc(sug.text)}</div>` : `<div class="hint">First time: pick a weight you can lift for ${item.reps[0]} clean reps with ${rirFor(item, phase)} reps left in the tank.</div>`}
         ${item.inc === 'bodyweight' ? '<div class="muted small" style="margin:-4px 0 8px">Bodyweight: enter 0 kg, added weight as +kg, or assistance as a minus number.</div>' : ''}
         <div class="set-head"><span></span><span>Weight</span><span>Reps</span><span>Done</span></div>
         <div class="sets" id="sets">${rows}</div>
-        <button class="btn small ghost" style="margin-top:8px" data-action="add-set">+ Add set</button>`;
+        <div class="row between" style="margin-top:8px">
+          <button class="btn small ghost" data-action="add-set">+ Add set</button>
+          <span class="muted small">Tapped ✓ by mistake? Tap it again to undo.</span></div>`;
     }
 
     const hist = (await exHistory(exId)).filter((l) => l.date < todayKey()).slice(0, 5);
@@ -420,8 +422,13 @@
     log.updatedAt = Date.now();
     list.sort((a, b) => a.updatedAt - b.updatedAt);
     await DB.put('logs', log);
+    const wasDone = row.classList.contains('done');
     row.classList.add('done');
+    row.dataset.w = String(w);
+    row.dataset.r = String(r);
+    $('.tick', row).setAttribute('aria-label', `Uncheck set ${i + 1}`);
     vibrate(30);
+    if (wasDone) { toast(`Set ${i + 1} updated: ${w ? `${w} kg × ` : ''}${r}`); return; }
 
     // prefill the next set's weight
     const next = row.nextElementSibling;
@@ -442,6 +449,52 @@
     } else {
       startTimer(item.rest, `Rest before set ${doneCount + 1}`);
     }
+  }
+
+  // Tap ✓ on a saved set: undo it (or save the correction if the numbers were edited)
+  function toggleSet(row) {
+    if (!row.classList.contains('done')) return saveSet(row);
+    const [wIn, rIn] = $$('input', row);
+    const w = wIn.value === '' ? '0' : String(+wIn.value);
+    const r = String(+rIn.value);
+    const edited = w !== String(+(row.dataset.w || 0)) || r !== String(+(row.dataset.r || 0));
+    if (edited && +r > 0) return saveSet(row);
+    return uncheckSet(row);
+  }
+
+  async function uncheckSet(row) {
+    const { exId, ctx } = sheetCtx;
+    const i = +row.dataset.i;
+    const list = state.todayLogs.get(slotOf(ctx.sessionKey, ctx.item)) || [];
+    const log = list.find((l) => l.exId === exId);
+    if (log && log.sets[i]) {
+      log.sets[i] = { w: log.sets[i].w, r: 0 };
+      while (log.sets.length && !(log.sets[log.sets.length - 1].r > 0)) log.sets.pop();
+      if (!log.sets.length) {
+        await DB.del('logs', log.key);
+        list.splice(list.indexOf(log), 1);
+      } else {
+        log.updatedAt = Date.now();
+        await DB.put('logs', log);
+      }
+    }
+    row.classList.remove('done');
+    $$('input', row)[1].value = '';
+    delete row.dataset.r;
+    $('.tick', row).setAttribute('aria-label', `Save set ${i + 1}`);
+    if (!$('#timer').hidden) { $('#timer').hidden = true; clearTimeout(timer.raf); }
+    vibrate(20);
+    toast(`Set ${i + 1} unchecked`);
+  }
+
+  async function deleteLog(key) {
+    const log = await DB.get('logs', key);
+    if (!log) return;
+    if (!confirm(`Remove ${exName(log.exId)} from ${fmtDay(parseKey(log.date))}? Its sets will be deleted from your progress.`)) return;
+    await DB.del('logs', key);
+    state.progressOpen = log.date;
+    toast('Removed');
+    render();
   }
 
   // ---------------------------------------------------------------- rest timer
@@ -967,10 +1020,12 @@
 
     const recent = [...byDate.keys()].sort().reverse().slice(0, 12).map((dk) => {
       const ls = byDate.get(dk);
-      const sess = P.sessions[ls[0].session];
+      const names = [...new Set(ls.map((l) => l.session))].map((k) => (P.sessions[k] ? P.sessions[k].name : '')).filter(Boolean).join(' + ');
       const sets = ls.reduce((s, l) => s + l.sets.filter((x) => x.r > 0).length, 0);
-      return `<details class="card" style="padding:0"><summary style="padding:12px 14px;list-style:none;display:flex;justify-content:space-between;gap:10px"><span><b>${fmtDay(parseKey(dk))}</b> <span class="muted small">· ${sess ? sess.name : ''}</span></span><span class="muted small">${ls.length} exercise${ls.length === 1 ? '' : 's'} · ${sets} set${sets === 1 ? '' : 's'}</span></summary>
-        <div class="hist" style="padding:0 14px 10px">${ls.map((l) => `<div><span>${esc(exName(l.exId))}</span><span>${l.sets.filter((s) => s.r > 0).map((s) => `${s.w ? s.w + '×' : ''}${s.r}`).join(' · ')}</span></div>`).join('')}</div></details>`;
+      return `<details class="card" style="padding:0"${state.progressOpen === dk ? ' open' : ''}><summary style="padding:12px 14px;list-style:none;display:flex;justify-content:space-between;gap:10px"><span><b>${fmtDay(parseKey(dk))}</b> <span class="muted small">· ${esc(names)}</span></span><span class="muted small">${ls.length} exercise${ls.length === 1 ? '' : 's'} · ${sets} set${sets === 1 ? '' : 's'}</span></summary>
+        <div class="hist" style="padding:0 14px 10px">${ls.map((l) => `<div><span>${esc(exName(l.exId))}</span><span class="row" style="gap:8px">${l.sets.filter((s) => s.r > 0).map((s) => `${s.w ? s.w + '×' : ''}${s.r}`).join(' · ')}
+          <button class="mini-del" data-action="del-log" data-key="${esc(l.key)}" aria-label="Remove ${esc(exName(l.exId))} from this day">✕</button></span></div>`).join('')}
+          <div class="muted small" style="border:0;padding-top:8px">Logged something by mistake? Tap ✕ to remove it.</div></div></details>`;
     }).join('');
 
     const lifts = [];
@@ -1157,7 +1212,8 @@
       case 'info-ex': openExercise(t.dataset.ex, null); break;
       case 'swap': openExercise(t.dataset.ex, sheetCtx && sheetCtx.ctx, false); break;
       case 'sheet-close': closeTop(); break;
-      case 'set-done': saveSet(t.closest('.set')); break;
+      case 'set-done': toggleSet(t.closest('.set')); break;
+      case 'del-log': deleteLog(t.dataset.key); break;
       case 'add-set': {
         const list = $('#sets');
         const last = list.lastElementChild;
