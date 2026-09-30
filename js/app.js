@@ -1034,6 +1034,7 @@
     const rec = { date, ts: when, month: monthKey(date), thumb, hasFull: true, fullBytes: full.size };
     await DB.put('photos', { date, blob: full });
     await DB.put('checkins', rec);
+    await Cloud.sync();
     dropThumbUrl(date);
     state.checkins.set(date, rec);
     if (state.restDays.has(date)) await setRest(date, false);
@@ -1454,6 +1455,8 @@
   async function renderSettings(v) {
     setHeader('Settings', 'Program, offline, photos, backup');
     const ms = await mediaStatus();
+    const cloud = Cloud.status();
+    const cloudText = cloud.lastSync ? `Last synced ${fmtDate(cloud.lastSync)}` : cloud.error ? 'Cloud sync unavailable' : 'Not synced yet';
     let storage = '';
     if (navigator.storage && navigator.storage.estimate) {
       const e = await navigator.storage.estimate();
@@ -1491,6 +1494,12 @@
       <div class="card">
         ${storage}
         <div class="small muted" style="margin-top:8px">Check-in photos are saved only on this phone. Each month can be downloaded as a ZIP from the Attendance tab. ${ERASE_AFTER_DAYS} days after you download a finished month, its full-size photos are erased to free space. Thumbnails and attendance stay.</div>
+      </div>
+      <div class="section-h">Cloud backup</div>
+      <div class="card">
+        <div class="field"><span>Supabase backup</span><b id="cloud-status">${cloudText}</b></div>
+        <div class="small muted">Your workout records and check-in photos are backed up to a private anonymous Supabase session. Offline data remains available on this phone.</div>
+        <button class="btn block" style="margin-top:10px" data-action="cloud-sync">Sync now</button>
       </div>
       <div class="section-h">Backup</div>
       <div class="card">
@@ -1677,6 +1686,11 @@
         break;
       case 'save-media': saveMedia(); break;
       case 'clear-media': await caches.delete(MEDIA_CACHE); toast('Offline copy removed'); render(); break;
+      case 'cloud-sync':
+        toast('Syncing with cloud…');
+        if (await Cloud.sync()) toast('Cloud backup complete'); else toast('Cloud sync unavailable');
+        render();
+        break;
       case 'install':
         if (state.installPrompt) { state.installPrompt.prompt(); await state.installPrompt.userChoice; state.installPrompt = null; render(); }
         break;
@@ -1756,7 +1770,8 @@
       s = { programStart: P.defaultStart, trackStart: t < P.defaultStart ? P.defaultStart : t };
       await DB.setMeta('settings', s);
     }
-    state.settings = s;
+    await Cloud.sync();
+    state.settings = await DB.meta('settings', s);
     for (const r of await DB.all('checkins')) state.checkins.set(r.date, r);
     (await DB.meta('restDays', [])).forEach((k) => state.restDays.add(k));
     await autoCleanup();
@@ -1776,6 +1791,8 @@
       });
       navigator.serviceWorker.register('./sw.js').catch(() => {});
     }
+    window.addEventListener('online', () => Cloud.sync());
+    setInterval(() => Cloud.sync(), 60000);
   }
   boot().catch((err) => {
     console.error(err);

@@ -1,4 +1,4 @@
-/* IndexedDB storage. Everything stays on the device.
+/* IndexedDB storage. This remains the offline-first local source of truth.
    Stores:
      checkins  {date, ts, month, thumb: Blob, hasFull, fullBytes}
      photos    {date, blob: Blob}            full-size check-in photos

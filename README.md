@@ -43,7 +43,7 @@ Works offline once installed. No backend. All data (including photos) stays on t
 | Area | Implementation |
 |---|---|
 | UI | Vanilla JavaScript, HTML, CSS. **No framework, no dependencies, no build step.** |
-| Storage | IndexedDB (check-ins, photo blobs, set logs, settings) |
+| Storage | IndexedDB (offline source of truth) plus optional Supabase backup for records and check-in photos |
 | Offline | Service Worker: stale-while-revalidate app shell, network-first media with on-device cache fallback |
 | Camera | `getUserMedia` → Canvas (mirror, resize, timestamp overlay) → JPEG blobs + thumbnails |
 | Archives | Hand-written ZIP writer with CRC-32 (`js/zip.js`, ~100 lines) |
@@ -81,9 +81,15 @@ curl -L https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/dist/exe
 python3 tools/build_exercises.py /tmp/exercises-dataset/data/exercises.json /tmp/free-exercise-db.json
 ```
 
+## Supabase backup
+
+Run `supabase.sql` in the Supabase SQL Editor before using cloud backup. The app uses the publishable key in `js/cloud.js`, anonymous Supabase Auth, Row Level Security, and a private `checkin-photos` Storage bucket. Enable **Anonymous sign-ins** under Authentication → Providers.
+
+Cloud backup is optional and does not replace IndexedDB. The current anonymous session is tied to the browser profile, so add a real email/provider login before relying on it for cross-device recovery.
+
 ## Privacy
 
-Check-in photos, set logs and attendance are stored only in the browser's IndexedDB on the device. Nothing is uploaded anywhere.
+Without cloud backup, check-in photos, set logs and attendance stay in the browser's IndexedDB. When enabled, records and full-size check-in photos are also uploaded to the configured private Supabase project under Row Level Security.
 
 ## Credits
 
