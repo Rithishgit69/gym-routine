@@ -1,5 +1,5 @@
 /* Service worker: offline app shell + offline copy of exercise photos and animations. */
-const VERSION = 'v1.2.0';
+const VERSION = 'v1.2.1';
 const SHELL_CACHE = `shell-${VERSION}`;
 const MEDIA_CACHE = 'media-v1';
 const SHELL = [
@@ -68,6 +68,9 @@ self.addEventListener('fetch', (event) => {
     })());
     return;
   }
+
+  // Always fetch the worker script from the network so installed apps can update.
+  if (url.pathname.endsWith('/sw.js')) return;
 
   // App shell: cache first, refresh in the background.
   if (url.origin === self.location.origin) {

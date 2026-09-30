@@ -1789,7 +1789,9 @@
         // a new version was installed: reload once so the update shows immediately
         if (hadController && !reloading && $('#camera').hidden) { reloading = true; location.reload(); }
       });
-      navigator.serviceWorker.register('./sw.js').catch(() => {});
+      navigator.serviceWorker.register('./sw.js', { updateViaCache: 'none' })
+        .then((registration) => registration.update())
+        .catch(() => {});
     }
     window.addEventListener('online', () => Cloud.sync());
     setInterval(() => Cloud.sync(), 60000);
