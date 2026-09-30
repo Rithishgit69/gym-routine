@@ -1,5 +1,7 @@
 # Gym Routine
 
+Version 1.2
+
 A mobile-first **Progressive Web App** that tells me exactly what to do in the gym, shows how to do each exercise with an animation, logs every set, and tracks attendance with **photo-verified check-ins**.
 
 Works offline once installed. No backend. All data (including photos) stays on the phone.
